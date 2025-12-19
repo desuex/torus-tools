@@ -1,3 +1,5 @@
 *.txt
-TorusTool\bin\*
-TorusTool\obj\*
+TorusTool/bin/*
+TorusTool/obj/*
+TorusTool.Verification/bin/*
+TorusTool.Verification/obj/*
