@@ -672,6 +672,90 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public async Task ExportHnk(IStorageProvider storageProvider)
+    {
+        if (string.IsNullOrEmpty(CurrentFile))
+        {
+            // TODO: Alert user
+            return;
+        }
+
+        var folders = await storageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Select Output Folder for Export",
+            AllowMultiple = false
+        });
+
+        if (folders.Count >= 1)
+        {
+            var outputDir = folders[0].Path.LocalPath;
+            // Use subfolder? "Exported_Filename"?
+
+            var name = System.IO.Path.GetFileNameWithoutExtension(CurrentFile);
+            var finalDir = System.IO.Path.Combine(outputDir, $"{name}_Export");
+
+            try
+            {
+                var exporter = new HunkExporter();
+                // Pass metadata from selection
+                string gName = SelectedGame?.Name ?? "Unknown";
+                string plat = "Unknown";
+                if (SelectedGame?.Name != null)
+                {
+                    if (SelectedGame.Name.Contains("PS3")) plat = "PS3";
+                    else if (SelectedGame.Name.Contains("Wii")) plat = "Wii";
+                    else if (SelectedGame.Name.Contains("PC")) plat = "PC";
+                }
+
+                await Task.Run(() => exporter.Export(CurrentFile, finalDir, gName, plat));
+
+                // Show success?
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Export Error: {ex}");
+            }
+        }
+    }
+
+    [RelayCommand]
+    public async Task ImportHnk(IStorageProvider storageProvider)
+    {
+        // 1. Pick Manifest
+        var files = await storageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Select manifest.yaml",
+            AllowMultiple = false,
+            FileTypeFilter = new[] { new FilePickerFileType("YAML Manifest") { Patterns = new[] { "manifest.yaml", "*.yaml" } } }
+        });
+
+        if (files.Count == 0) return;
+        var manifestPath = files[0].Path.LocalPath;
+
+        // 2. Pick Output HNK
+        var saveFile = await storageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Save New HNK File",
+            DefaultExtension = "hnk",
+            FileTypeChoices = new[] { new FilePickerFileType("Hunk File") { Patterns = new[] { "*.hnk" } } }
+        });
+
+        if (saveFile != null)
+        {
+            var outputPath = saveFile.Path.LocalPath;
+            try
+            {
+                var importer = new HunkImporter();
+                await Task.Run(() => importer.Import(manifestPath, outputPath));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Import Error: {ex}");
+            }
+        }
+    }
+
+    [RelayCommand]
     public async Task OpenFile(IStorageProvider storageProvider)
     {
         var files = await storageProvider.OpenFilePickerAsync(new FilePickerOpenOptions

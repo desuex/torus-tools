@@ -3,3 +3,6 @@ TorusTool/bin/*
 TorusTool/obj/*
 TorusTool.Verification/bin/*
 TorusTool.Verification/obj/*
+.DS_Store
+*.bin
+*.hnk

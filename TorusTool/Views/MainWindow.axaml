@@ -31,6 +31,11 @@
                 <Separator/>
                 <MenuItem Header="E_xit" Command="{Binding ExitAppCommand}"/>
             </MenuItem>
+            <!-- New Tools Menu -->
+             <MenuItem Header="_Tools">
+                 <MenuItem Header="Ex_port HNK..." Command="{Binding ExportHnkCommand}" CommandParameter="{Binding $parent[Window].StorageProvider}"/>
+                 <MenuItem Header="Im_port HNK..." Command="{Binding ImportHnkCommand}" CommandParameter="{Binding $parent[Window].StorageProvider}"/>
+             </MenuItem>
         </Menu>
         
         <StackPanel Grid.Row="1" Orientation="Vertical" Margin="10">

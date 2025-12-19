@@ -8,7 +8,46 @@ class Program
 {
     static void Main(string[] args)
     {
-        VerifyFile(@"/Volumes/CORSAIR/TorusGames/Games/WIN/Monster High New Ghoul in School/HUNKFILES/Global.hnk");
+        if (args.Length == 0)
+        {
+            Console.WriteLine("Usage:");
+            Console.WriteLine("  verify <hnk_file>");
+            Console.WriteLine("  export <hnk_file> <output_dir>");
+            Console.WriteLine("  import <manifest_file> <output_hnk>");
+            return;
+        }
+
+        string command = args[0].ToLower();
+        try
+        {
+            switch (command)
+            {
+                case "verify":
+                    if (args.Length < 2) { Console.WriteLine("Missing file path"); return; }
+                    VerifyFile(args[1]);
+                    break;
+                case "export":
+                    if (args.Length < 3) { Console.WriteLine("Missing arguments"); return; }
+                    Console.WriteLine($"Exporting {args[1]} to {args[2]}...");
+                    new HunkExporter().Export(args[1], args[2]);
+                    Console.WriteLine("Export complete.");
+                    break;
+                case "import":
+                    if (args.Length < 3) { Console.WriteLine("Missing arguments"); return; }
+                    Console.WriteLine($"Importing {args[1]} to {args[2]}...");
+                    new HunkImporter().Import(args[1], args[2]);
+                    Console.WriteLine("Import complete.");
+                    break;
+                default:
+                    Console.WriteLine("Unknown command.");
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+            Console.WriteLine(ex.StackTrace);
+        }
     }
 
     static void VerifyFile(string testFile)
