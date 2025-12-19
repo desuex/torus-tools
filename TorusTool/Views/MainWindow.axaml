@@ -1,0 +1,197 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:TorusTool.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Class="TorusTool.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="TorusTool">
+
+    <Design.DataContext>
+        <!-- This only sets the DataContext for the previewer in an IDE,
+             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <Grid RowDefinitions="Auto, *">
+        <StackPanel Orientation="Vertical" Margin="10">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <ComboBox ItemsSource="{Binding AvailableGames}" SelectedItem="{Binding SelectedGame}" MinWidth="200">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Name}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <Button Name="OpenFileButton" Content="Open File" Click="OpenFileButton_Click"/>
+            </StackPanel>
+            <TextBlock Text="{Binding CurrentFile}" VerticalAlignment="Center" Margin="0,5,0,0"/>
+        </StackPanel>
+
+        <Grid Grid.Row="1" ColumnDefinitions="300, 5, *" Margin="10">
+            <!-- Tree View -->
+            <Grid Grid.Column="0" RowDefinitions="*, Auto">
+                <TreeView Grid.Row="0" ItemsSource="{Binding RootNodes}" SelectedItem="{Binding SelectedNode}">
+                    <TreeView.ItemTemplate>
+                        <TreeDataTemplate ItemsSource="{Binding Children}">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                 <TextBlock Text="{Binding Icon}"/>
+                                 <TextBlock Text="{Binding Name}"/>
+                            </StackPanel>
+                        </TreeDataTemplate>
+                    </TreeView.ItemTemplate>
+                </TreeView>
+                <!-- Toggle View Mode Button -->
+                <CheckBox Grid.Row="1" Content="Show Hex Only" IsChecked="{Binding ShowHexOnly}" Margin="5">
+                    <CheckBox.IsEnabled>
+                        <MultiBinding Converter="{x:Static BoolConverters.Or}">
+                            <Binding Path="HasStringTable"/>
+                            <Binding Path="HasHunkHeader"/>
+                            <Binding Path="HasFontDescriptor"/>
+                        </MultiBinding>
+                    </CheckBox.IsEnabled>
+                </CheckBox>
+            </Grid>
+            
+            <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="Gray"/>
+            
+            <!-- Right Panel -->
+            <Grid Grid.Column="2" RowDefinitions="Auto, Auto, *, *, Auto">
+                <!-- DataGrid View (String Table) -->
+                <DataGrid Grid.Row="0" ItemsSource="{Binding CurrentStringTable}" IsVisible="{Binding IsStringTableVisible}"
+                          AutoGenerateColumns="True" IsReadOnly="True" GridLinesVisibility="All"
+                          BorderThickness="1" BorderBrush="Gray" Height="200">
+                </DataGrid>
+
+                <!-- DataGrid View (Hunk Header) -->
+                <DataGrid Grid.Row="1" ItemsSource="{Binding CurrentHunkHeader}" IsVisible="{Binding IsHunkHeaderVisible}"
+                          AutoGenerateColumns="True" IsReadOnly="True" GridLinesVisibility="All"
+                          BorderThickness="1" BorderBrush="Gray" Height="150">
+                </DataGrid>
+
+                <!-- DataGrid View (Font Descriptor) -->
+                <Grid Grid.Row="2" RowDefinitions="*,*" IsVisible="{Binding IsFontDescriptorVisible}">
+                    <!-- DataGrid View (Font Descriptor) -->
+                    <DataGrid Grid.Row="0" ItemsSource="{Binding CurrentFontItems}"
+                              AutoGenerateColumns="True" IsReadOnly="True" GridLinesVisibility="All"
+                              BorderThickness="1" BorderBrush="Gray">
+                    </DataGrid>
+    
+                    <!-- Atlas View (Font Descriptor) -->
+                     <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                         <ItemsControl ItemsSource="{Binding CurrentFontItems}">
+                             <ItemsControl.ItemsPanel>
+                                 <ItemsPanelTemplate>
+                                     <Canvas Width="1024" Height="1024" Background="Black"/>
+                                 </ItemsPanelTemplate>
+                             </ItemsControl.ItemsPanel>
+                             <ItemsControl.ItemTemplate>
+                                 <DataTemplate>
+                                     <Rectangle Width="{Binding VisualWidth}" Height="{Binding VisualHeight}"
+                                                Stroke="Lime" StrokeThickness="1"
+                                                Fill="#3300FF00" 
+                                                Canvas.Left="{Binding VisualX}" Canvas.Top="{Binding VisualY}"
+                                                IsVisible="{Binding IsVisibleInAtlas}">
+                                         <ToolTip.Tip>
+                                             <StackPanel>
+                                                <TextBlock Text="{Binding CharDisplay}"/>
+                                                <TextBlock Text="{Binding DecodedData}"/>
+                                             </StackPanel>
+                                         </ToolTip.Tip>
+                                     </Rectangle>
+                                 </DataTemplate>
+                             </ItemsControl.ItemTemplate>
+                         </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- DataGrid View (RenderSprite) -->
+                <Grid Grid.Row="3" ColumnDefinitions="*, *" IsVisible="{Binding IsRenderSpriteVisible}">
+                    <DataGrid Grid.Column="0" ItemsSource="{Binding CurrentRenderSpriteItems}" 
+                              SelectedItem="{Binding SelectedRenderSpriteItem}"
+                              AutoGenerateColumns="True" IsReadOnly="True" GridLinesVisibility="All"
+                              BorderThickness="1" BorderBrush="Gray">
+                    </DataGrid>
+                    
+                    <!-- Sprite Visualizer -->
+                    <Border Grid.Column="1" BorderBrush="Gray" BorderThickness="1" Background="#202020" Margin="5">
+                        <ItemsControl ItemsSource="{Binding SelectedRenderSpriteItem.Points}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <Canvas Width="500" Height="500" Background="Black">
+                                        <Canvas.RenderTransform>
+                                             <ScaleTransform ScaleX="5" ScaleY="5"/>
+                                        </Canvas.RenderTransform>
+                                    </Canvas>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Ellipse Width="2" Height="2" Fill="Cyan"
+                                             Canvas.Left="{Binding X}" Canvas.Top="{Binding Y}"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+                </Grid>
+
+                <!-- Texture View -->
+                <Grid Grid.Row="3" IsVisible="{Binding IsTextureVisible}">
+                     <Grid.RowDefinitions>
+                         <RowDefinition Height="Auto"/>
+                         <RowDefinition Height="*"/>
+                     </Grid.RowDefinitions>
+                     <StackPanel Orientation="Horizontal" Spacing="10">
+                         <TextBox Text="{Binding TextureInfo}" FontWeight="Bold" Margin="5" IsReadOnly="True" Width="800" TextWrapping="Wrap"/>
+                         <CheckBox Content="Show Font Overlay" IsChecked="{Binding ShowFontOverlay}" Margin="5"/>
+                         <CheckBox Content="Big Endian" IsChecked="{Binding IsBigEndian}" Margin="5"/>
+                     </StackPanel>
+                     
+                     <Border Grid.Row="1" BorderBrush="Gray" BorderThickness="1" Background="#202020" Margin="5">
+                         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                             <Grid>
+                                 <Image Source="{Binding CurrentTextureImage}" Stretch="None"/>
+                                 
+                                 <!-- Font Overlay -->
+                                 <ItemsControl ItemsSource="{Binding CurrentFontItems}" IsVisible="{Binding ShowFontOverlay}">
+                                     <ItemsControl.ItemsPanel>
+                                         <ItemsPanelTemplate>
+                                             <Canvas Width="{Binding CurrentTextureImage.Size.Width}" Height="{Binding CurrentTextureImage.Size.Height}"/>
+                                         </ItemsPanelTemplate>
+                                     </ItemsControl.ItemsPanel>
+                                     <ItemsControl.ItemTemplate>
+                                         <DataTemplate>
+                                             <Rectangle Canvas.Left="{Binding X}" Canvas.Top="{Binding Y}"
+                                                        Width="{Binding Width}" Height="{Binding Height}"
+                                                        Stroke="Red" StrokeThickness="1" Fill="#33FF0000">
+                                                 <ToolTip.Tip>
+                                                     <TextBlock Text="{Binding CharDisplay}"/>
+                                                 </ToolTip.Tip>
+                                             </Rectangle>
+                                         </DataTemplate>
+                                     </ItemsControl.ItemTemplate>
+                                 </ItemsControl>
+                             </Grid>
+                         </ScrollViewer>
+                     </Border>
+                </Grid>
+
+                <!-- Hex View -->
+                <ScrollViewer Grid.Row="4">
+                    <ScrollViewer.IsVisible>
+                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                            <Binding Path="!IsStringTableVisible"/>
+                            <Binding Path="!IsHunkHeaderVisible"/>
+                            <Binding Path="!IsFontDescriptorVisible"/>
+                            <Binding Path="!IsRenderSpriteVisible"/>
+                            <Binding Path="!IsTextureVisible"/>
+                        </MultiBinding>
+                    </ScrollViewer.IsVisible>
+                    <TextBlock Text="{Binding HexViewText}" FontFamily="Consolas, Monospace" FontSize="12" Margin="5"/>
+                </ScrollViewer>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

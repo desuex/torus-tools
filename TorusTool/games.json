@@ -1,0 +1,14 @@
+[
+    {
+        "Id": "MHNGIS_PC",
+        "Name": "Monster High: New Ghoul in School (PC)",
+        "Platform": "PC",
+        "IsBigEndian": false
+    },
+    {
+        "Id": "MHNGIS_PS3",
+        "Name": "Monster High: New Ghoul in School (PS3)",
+        "Platform": "PS3",
+        "IsBigEndian": true
+    }
+]
