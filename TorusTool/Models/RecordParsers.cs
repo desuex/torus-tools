@@ -2,6 +2,9 @@ using System;
 using System.Text;
 using System.IO;
 using TorusTool.IO;
+using System.Collections.Generic;
+using System.Buffers.Binary;
+using System.Linq;
 
 namespace TorusTool.Models;
 
@@ -183,7 +186,10 @@ public static class RecordParsers
         for (int i = 0; i < fd.Header.Cnt1; i++)
         {
             var row = new GlyphMetrics();
-            row.Data = reader.ReadBytes(8);
+            row.Value1 = reader.ReadUInt16();
+            row.Value2 = reader.ReadUInt16();
+            row.Width = reader.ReadInt16();
+            row.Aux = reader.ReadInt16();
             fd.Rows.Add(row);
         }
 
@@ -293,5 +299,207 @@ public static class RecordParsers
         else tex.Format = "DXT1";
 
         return tex;
+    }
+
+    public class DataTableData
+    {
+        public int Count;
+        public int Unknown1;
+        public int DataSize;
+        public int TypeCode;
+        public byte[] Body = Array.Empty<byte>();
+        public List<string> StringValues = new();
+        public List<byte[]> ElementRawData = new();
+    }
+
+    public static DataTableData? ParseDataTable(HunkRecord record, bool isBigEndian = false)
+    {
+        // Support both Data1 and Data2 as potential table containers
+        if (record.Type != HunkRecordType.TSEDataTableData1 && record.Type != HunkRecordType.TSEDataTableData2) return null;
+        if (record.RawData.Length < 28) return null;
+
+        var dt = new DataTableData();
+        dt.TypeCode = (int)record.Type;
+
+        using var stream = new MemoryStream(record.RawData);
+        using var reader = new TorusBinaryReader(stream, isBigEndian);
+
+        // Header parsing strategies
+        int headerSize = 28; // Default for Data1
+
+        if (record.Type == HunkRecordType.TSEDataTableData2)
+        {
+            // Data2 seems to have variable header size or Offset to Data at 0x08
+            // [Unk1 4b] [Count 4b] [DataOffset 4b] ...
+            stream.Position = 0;
+            dt.Unknown1 = reader.ReadInt32();
+            dt.Count = reader.ReadInt32(); // Can be mismatch/negative?
+
+            int dataOffset = reader.ReadInt32();
+
+            // Heuristic for validity of DataOffset
+            if (dataOffset > 0 && dataOffset < record.RawData.Length)
+            {
+                headerSize = dataOffset;
+            }
+
+            // Log weird counts
+            // e.g. FFFF0008. If we treat as short?
+            // Actually, for display purposes, we just trust the Int32 for now,
+            // or handle the negative case in the splitter.
+        }
+        else // HunkRecordType.TSEDataTableData1
+        {
+            // Data1 Standard Header (28 bytes)
+            dt.Unknown1 = reader.ReadInt32();
+            dt.Count = reader.ReadInt32();
+            int unk2 = reader.ReadInt32();
+            dt.DataSize = reader.ReadInt32();
+            int unk3 = reader.ReadInt32();
+            int unk4 = reader.ReadInt32();
+            // dt.TypeCode is already set from record.Type
+            reader.ReadInt32(); // Consume the TypeCode from stream
+        }
+
+        // Read Body
+        // The reader's position is now at the end of the header for Data1,
+        // or after the initial 12 bytes for Data2.
+        // We need to read the body starting from 'headerSize'.
+        // The current reader position might not be at 'headerSize' for Data2 if dataOffset was used.
+
+        reader.Seek(headerSize, SeekOrigin.Begin);
+
+        int bodyLen = record.RawData.Length - headerSize;
+        if (bodyLen > 0)
+        {
+            dt.Body = reader.ReadBytes(bodyLen);
+
+            // Structured Parsing: Read 'Count' strings sequentially
+            // We'll try to parse the body as a sequence of null-terminated strings.
+            // If we fail (garbage characters), we assume it's a binary table.
+
+            try
+            {
+                using var bodyReader = new TorusBinaryReader(dt.Body, isBigEndian);
+                var tempList = new List<string>();
+                bool isStringTable = true;
+
+                for (int i = 0; i < dt.Count; i++)
+                {
+                    // Peek or read? We need to read until null.
+                    // Max string length safety?
+                    var startPos = bodyReader.Position;
+                    if (startPos >= dt.Body.Length)
+                    {
+                        // Unexpected EOF before Count reached
+                        isStringTable = false;
+                        break;
+                    }
+
+                    // Read chars until null
+                    var sb = new StringBuilder();
+                    bool nullFound = false;
+                    while (bodyReader.Position < bodyReader.Length - 1)
+                    {
+                        ushort val = bodyReader.ReadUInt16(); // Strings are UTF-16 LE
+                        // Endianness is handled by TorusBinaryReader internally now.
+                        // if (isBigEndian) val = BinaryPrimitives.ReverseEndianness(val); 
+
+                        if (val == 0)
+                        {
+                            nullFound = true;
+                            break;
+                        }
+
+                        char c = (char)val;
+                        // Basic validation: Is it a valid text char?
+                        if (char.IsControl(c) && c != '\t' && c != '\r' && c != '\n')
+                        {
+                            // Allow strict subset? 
+                            // Binary data often has low control chars (0x01, 0x02).
+                            // Real strings usually don't.
+                            // But let's be lenient for now, or strict if we want to distinguish binary.
+                            // GhoulHairstyles has 01 00 ... so that's char(1). IsControl(1) is true.
+                            isStringTable = false;
+                            break;
+                        }
+                        sb.Append(c);
+                    }
+
+                    if (!isStringTable) break;
+
+                    if (!nullFound)
+                    {
+                        // End of stream without null
+                        isStringTable = false;
+                        break;
+                    }
+
+                    tempList.Add(sb.ToString());
+                }
+
+                // Validation: Did we consume enough of the body?
+                // Binary tables might accidentally look like empty strings (00 00).
+                // If we found 'Count' strings but only used 6 bytes out of 66, it's not a string table.
+                long consumed = bodyReader.Position;
+                if (consumed < dt.Body.Length * 0.8) // Threshold: 80%? 90%?
+                {
+                    // Exception: Start of file padding? Unlikely for DataTable.
+                    // Let's require at least 90% or strictly "near end".
+                    // Actually, if we stopped early, it means the rest of the bytes are unused?
+                    // In Hunk files, everything is usually packed.
+                    isStringTable = false;
+                }
+
+                if (isStringTable && tempList.Count == dt.Count)
+                {
+                    dt.StringValues = tempList;
+                }
+                else
+                {
+                    // Fallback: Binary Table?
+                    // Try to split by count
+                    // Handle Data2 quirks: Negative count means ??
+                    // If Count is huge/negative, we can't split.
+
+                    int validCount = dt.Count;
+                    if (validCount < 0) validCount = 0; // Or treat as ushort?
+
+                    if (validCount > 0 && dt.Body.Length > 0 && (dt.Body.Length % validCount == 0))
+                    {
+                        int stride = dt.Body.Length / validCount;
+                        dt.ElementRawData = new List<byte[]>();
+                        for (int i = 0; i < validCount; i++)
+                        {
+                            var chunk = new byte[stride];
+                            Array.Copy(dt.Body, i * stride, chunk, 0, stride);
+                            dt.ElementRawData.Add(chunk);
+                        }
+                    }
+                    else if (dt.Body.Length > 0)
+                    {
+                        // Can't split evenly. Just add whole body as one element?
+                        // Or if we suspected Data2 has 8-byte entries?
+                        // Heuristic for Data2: 8-byte blocks?
+                        if (dt.TypeCode == (int)HunkRecordType.TSEDataTableData2 && dt.Body.Length % 8 == 0)
+                        {
+                            // Force 8-byte split logic if structure looks like map entries
+                            int stride = 8;
+                            int count = dt.Body.Length / stride;
+                            dt.ElementRawData = new List<byte[]>();
+                            for (int i = 0; i < count; i++)
+                            {
+                                var chunk = new byte[stride];
+                                Array.Copy(dt.Body, i * stride, chunk, 0, stride);
+                                dt.ElementRawData.Add(chunk);
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        return dt;
     }
 }

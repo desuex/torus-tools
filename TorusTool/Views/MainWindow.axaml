@@ -6,6 +6,7 @@
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
         x:Class="TorusTool.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
+        Name="MainWindowRoot"
         Icon="/Assets/avalonia-logo.ico"
         Title="TorusTool">
 
@@ -15,9 +16,26 @@
         <vm:MainWindowViewModel/>
     </Design.DataContext>
 
-    <Grid RowDefinitions="Auto, *">
-        <StackPanel Orientation="Vertical" Margin="10">
+    <Grid RowDefinitions="Auto, Auto, *">
+        <!-- New Menu Bar -->
+        <Menu Grid.Row="0">
+            <MenuItem Header="_File">
+                <MenuItem Header="_Open..." Command="{Binding OpenFileCommand}" CommandParameter="{Binding $parent[Window].StorageProvider}"/>
+                <MenuItem Header="_Recent Files" ItemsSource="{Binding RecentFiles}">
+                    <MenuItem.ItemTemplate>
+                        <DataTemplate>
+                            <MenuItem Header="{Binding}" Command="{Binding #MainWindowRoot.((vm:MainWindowViewModel)DataContext).LoadRecentFileCommand}" CommandParameter="{Binding}"/>
+                        </DataTemplate>
+                    </MenuItem.ItemTemplate>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="E_xit" Command="{Binding ExitAppCommand}"/>
+            </MenuItem>
+        </Menu>
+        
+        <StackPanel Grid.Row="1" Orientation="Vertical" Margin="10">
             <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Text="Game Format:" VerticalAlignment="Center"/>
                 <ComboBox ItemsSource="{Binding AvailableGames}" SelectedItem="{Binding SelectedGame}" MinWidth="200">
                     <ComboBox.ItemTemplate>
                         <DataTemplate>
@@ -25,12 +43,11 @@
                         </DataTemplate>
                     </ComboBox.ItemTemplate>
                 </ComboBox>
-                <Button Name="OpenFileButton" Content="Open File" Click="OpenFileButton_Click"/>
             </StackPanel>
             <TextBlock Text="{Binding CurrentFile}" VerticalAlignment="Center" Margin="0,5,0,0"/>
         </StackPanel>
 
-        <Grid Grid.Row="1" ColumnDefinitions="300, 5, *" Margin="10">
+        <Grid Grid.Row="2" ColumnDefinitions="300, 5, *" Margin="10">
             <!-- Tree View -->
             <Grid Grid.Column="0" RowDefinitions="*, Auto">
                 <TreeView Grid.Row="0" ItemsSource="{Binding RootNodes}" SelectedItem="{Binding SelectedNode}">
@@ -106,6 +123,17 @@
                          </ItemsControl>
                     </ScrollViewer>
                 </Grid>
+
+                <!-- DataGrid View (DataTable Strings/Hex) -->
+                <DataGrid Grid.Row="2" ItemsSource="{Binding CurrentDataTableItems}" IsVisible="{Binding IsDataTableVisible}"
+                          AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="All"
+                          BorderThickness="1" BorderBrush="Gray">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Index" Binding="{Binding Index}"/>
+                        <DataGridTextColumn Header="Hex" Binding="{Binding HexValue}" FontFamily="Consolas, Monospace"/>
+                        <DataGridTextColumn Header="Extracted String" Binding="{Binding StringValue}"/>
+                    </DataGrid.Columns>
+                </DataGrid>
 
                 <!-- DataGrid View (RenderSprite) -->
                 <Grid Grid.Row="3" ColumnDefinitions="*, *" IsVisible="{Binding IsRenderSpriteVisible}">
@@ -187,6 +215,7 @@
                             <Binding Path="!IsFontDescriptorVisible"/>
                             <Binding Path="!IsRenderSpriteVisible"/>
                             <Binding Path="!IsTextureVisible"/>
+                            <Binding Path="!IsDataTableVisible"/>
                         </MultiBinding>
                     </ScrollViewer.IsVisible>
                     <TextBlock Text="{Binding HexViewText}" FontFamily="Consolas, Monospace" FontSize="12" Margin="5"/>
