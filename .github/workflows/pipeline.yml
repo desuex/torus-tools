@@ -44,6 +44,7 @@ jobs:
       run: dotnet build TorusTool.sln --configuration Release --no-restore
 
     - name: Publish
+      shell: bash
       run: |
         dotnet publish TorusTool/TorusTool.csproj \
         --configuration Release \
