@@ -23,6 +23,7 @@ public enum HunkRecordType : int
     TSETextureHeader = 0x41150,
     TSETextureData = 0x40151,
     TSETextureData2 = 0x801151,
+    TSETextureDataPS3 = 0x800151,
     TSETextureDataWii = 0x202151,
 
     RenderModelTemplateHeader = 0x101050,

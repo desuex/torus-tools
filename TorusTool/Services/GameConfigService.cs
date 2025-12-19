@@ -21,7 +21,7 @@ public class GameConfigService
 
     private void LoadGames()
     {
-        string configPath = "games.json";
+        string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "games.json");
         if (File.Exists(configPath))
         {
             try
