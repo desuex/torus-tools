@@ -63,10 +63,8 @@ public partial class MainWindowViewModel : ViewModelBase
     public ObservableCollection<StringTableRow> CurrentStringTable { get; } = new();
 
     // Font Descriptor Logic
-    public ObservableCollection<FontDescriptorData> CurrentFontDescriptor { get; } = new();
-    // Actually, FontDescriptorData is a single object with lists. 
-    // We should probably expose the lists or a composite view.
-    // Let's expose a collection of "FontItems" for the DataGrid.
+    [ObservableProperty]
+    private FontDescriptorData? _selectedFontDescriptor;
 
     public ObservableCollection<FontItemViewModel> CurrentFontItems { get; } = new();
 
@@ -295,130 +293,69 @@ public partial class MainWindowViewModel : ViewModelBase
         if (fontRecord != null)
         {
             fd = RecordParsers.ParseFontDescriptor(fontRecord, IsBigEndian);
+            SelectedFontDescriptor = fd; // Assign property
+
             if (fd != null)
             {
                 // Combine Row and Tuple if counts match
                 // If not, just show what we can?
                 // Cnt1 applies to both.
 
-                for (int i = 0; i < fd.Header.Cnt1; i++)
+                for (int i = 0; i < fd.PlatformHeader.GlyphCount; i++)
                 {
                     var item = new FontItemViewModel
                     {
                         Index = i
                     };
 
-                    if (i < fd.Tuples.Count)
+                    if (i < fd.Codepoints.Count)
                     {
-                        item.CharId = fd.Tuples[i].CharId;
-                        item.CharDisplay = fd.Tuples[i].CharDisplay;
+                        item.CharId = (ushort)fd.Codepoints[i].Code;
+                        item.CharDisplay = fd.Codepoints[i].CharDisplay;
                     }
 
-                    if (i < fd.Rows.Count)
+                    if (i < fd.PreGlyphs.Count)
                     {
-                        var row = fd.Rows[i];
+                        var row = fd.PreGlyphs[i];
                         item.RowData = row.HexDisplay;
 
                         // Custom Parsing based on visualization
-                        // Value2: X (likely in 4-pixel blocks)
-                        // Value1: Y (likely bitpacked or just Y)
-                        // Width: valid width
-                        // Aux: ???
+                        // V1: X (likely in 4-pixel blocks)
+                        // V0: Y (likely bitpacked or just Y)
+                        // V2: Width (valid width)
+                        // V3: Aux
 
-                        // 2-Row Atlas Hypothesis
-                        // Row 0: Value1 ends in E0? -> Y=0
-                        // Row 1: Value1 ends in E1? -> Y=128
+                        // Mapping based on previous heuristics:
+                        // Value2 (V1) -> X
+                        // Value1 (V0) -> Y
 
-                        // New Logic based on Win/PS3 Comparison:
-                        // PS3 Data (after swap): E0-00-01-1B...
-                        // Win Data:              00-E0-1B-01...
+                        item.X = (short)((row.V1 & 0xFF) * 4);
 
-                        // Actually, let's look at the "FirstValid" from User Report:
-                        // Win: 00-E0-1B-01...
-                        // PS3: E0-00-01-1B... -> This looks like scrambled words?
-                        // Or maybe My previous parse was reading bytes in file order.
-                        // Now "reader.ReadUInt16()" will Swap if BigEndian.
+                        // item.Y logic:
+                        item.Y = (short)(((row.V0 >> 8) & 1) * 128);
 
-                        // If file has 00 E0 ...
-                        // LE Read: 0xE000
-                        // BE Read: 0x00E0
-
-                        // Let's assume the Parser does its job.
-                        // We just map fields:
-                        // X = Value2 * 4?
-                        // Y = derived from Value1?
-
-                        // Let's try to match the "Win Data" from the request which seemed correct-ish.
-                        // Win Hex: 00-E0-1B-01... (Bytes 0,1, 2,3)
-                        // Value1 = 0xE000 (LE)
-                        // Value2 = 0x011B (LE)
-                        // Width = ...
-
-                        // Wait, "FirstValid" X=108. 108/4 = 27 = 0x1B.
-                        // So Byte 2 (0x1B) is X. 
-                        // In Win (LE implied?), Bytes are 00 E0 1B 01.
-                        // 0,1 -> Value1. 2,3 -> Value2.
-                        // Value1 = E000. Value2 = 011B.
-                        // So X comes from lower byte of Value2? (0x1B).
-
-                        // PS3 Hex: E0 00 01 1B
-                        // BE Read:
-                        // Value1 = E000.
-                        // Value2 = 011B.
-                        // The values MATCH if parsed correctly!
-
-                        // So we can use the same logic for both.
-
-                        // X = (Value2 & 0xFF) * 4;
-                        // Y = ((Value1 >> 8) & 1) * 128; // 0xE0 -> 0 (Even), 0xE1 -> 1 (Odd) ??
-                        // Actually 0xE0 >> 8 is 0x00 ?? No, 0xE0 is byte 1.
-                        // Value1 = 0xE000.
-                        // High byte is 0xE0.
-                        // (0xE0 & 1) == 0. Y=0. Correct.
-
-                        item.X = (short)((row.Value2 & 0xFF) * 4);
-                        // item.Y = (short)(((row.Value1 >> 8) & 1) * 128); // Based on 0xE0/0xE1
-
-                        // Let's rely on the user's "Found D-Pad" example
-                        // Win: 09-E1-22-01...
-                        // Value1 = E109. High=E1. (Odd -> Y=128?).
-                        // Value2 = 0122. Low=22. 0x22 = 34. 34*4 = 136.
-                        // User says X_Calc=136. CORRECT.
-
-                        item.Y = (short)(((row.Value1 >> 8) & 1) * 128);
-
-                        // Width is direct
-                        item.Width = row.Width;
-                        item.Aux = row.Aux;
+                        // Width is direct (cast V2 to short)
+                        item.Width = (short)row.V2;
+                        item.Aux = (short)row.V3;
 
 
                         // Heuristic for Height: 
                         // Q1=96 (matches L-Stick height 96).
-                        // Q3=28 (too small).
 
-                        short globalHeight = (short)fd.Header.Q1;
+                        short globalHeight = (short)fd.PlatformHeader.EmOrLineHeight;
                         if (globalHeight <= 0) globalHeight = 32;
 
                         item.Height = globalHeight;
-
-                        // item.Aux = globalHeight; // Removed hack
 
                         item.DecodedData = $"{item.X}, {item.Y}, {item.Width}, {item.Aux} (Mixed)";
 
                         // Populate ExtraData if valid index
                         int extraIdx = item.Aux; // Aux is used as index? Or explicit field?
 
-                        if (extraIdx >= 0 && extraIdx < fd.Extras.Count)
+                        if (extraIdx >= 0 && extraIdx < fd.Glyphs.Count)
                         {
-                            var eData = fd.Extras[extraIdx].Data;
-                            short ReadExtraShort(int offset)
-                            {
-                                if (IsBigEndian)
-                                    return (short)((eData[offset] << 8) | eData[offset + 1]);
-                                else
-                                    return BitConverter.ToInt16(eData, offset);
-                            }
-                            item.ExtraData = $"{ReadExtraShort(0)}, {ReadExtraShort(2)}, {ReadExtraShort(4)}, {ReadExtraShort(6)}";
+                            var g = fd.Glyphs[extraIdx];
+                            item.ExtraData = $"{g.A}, {g.B}, {g.C}, {g.D}";
                         }
                     }
 
@@ -473,7 +410,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
                     if (fd != null)
                     {
-                        TextureInfo += $" | Hdr: V={fd.Header.Vertical}, Z={fd.Header.Z}, Q1={fd.Header.Q1}, Q3={fd.Header.Q3}";
+                        TextureInfo += $" | Hdr: V={fd.PlatformHeader.GlobalMinY}, Z={fd.PlatformHeader.FlagsOrVersion}, Q1={fd.PlatformHeader.EmOrLineHeight}, Q3={fd.PlatformHeader.SomethingSize}";
                     }
 
                     var dpadCandidates = CurrentFontItems.Where(x => Math.Abs(x.Width) >= 98 && Math.Abs(x.Width) <= 108).ToList();

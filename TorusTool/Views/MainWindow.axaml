@@ -94,15 +94,46 @@
                 </DataGrid>
 
                 <!-- DataGrid View (Font Descriptor) -->
-                <Grid Grid.Row="2" RowDefinitions="*,*" IsVisible="{Binding IsFontDescriptorVisible}">
+                <Grid Grid.Row="2" RowDefinitions="Auto, *, *" IsVisible="{Binding IsFontDescriptorVisible}">
+                    <!-- Header Info -->
+                    <StackPanel Grid.Row="0" Orientation="Vertical" Margin="5" Background="#303030">
+                        <TextBlock Text="Platform Header (0x00)" FontWeight="Bold" Margin="5"/>
+                        <WrapPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding SelectedFontDescriptor.PlatformHeader.FlagsOrVersion, StringFormat='Ver: {0}'}" Margin="5"/>
+                            <TextBlock Text="{Binding SelectedFontDescriptor.PlatformHeader.EmOrLineHeight, StringFormat='LineHeight: {0}'}" Margin="5"/>
+                            <TextBlock Text="{Binding SelectedFontDescriptor.PlatformHeader.GlobalMinX, StringFormat='MinX: {0}'}" Margin="5"/>
+                            <TextBlock Text="{Binding SelectedFontDescriptor.PlatformHeader.GlobalMinY, StringFormat='MinY: {0}'}" Margin="5"/>
+                            <TextBlock Text="{Binding SelectedFontDescriptor.PlatformHeader.GlyphCount, StringFormat='Glyphs: {0}'}" Margin="5"/>
+                            <TextBlock Text="{Binding SelectedFontDescriptor.PlatformHeader.GlyphDataCount, StringFormat='GlyphData: {0}'}" Margin="5"/>
+                        </WrapPanel>
+                        <TextBlock Text="File Header LE (0x10)" FontWeight="Bold" Margin="5"/>
+                        <WrapPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding SelectedFontDescriptor.FileHeader.TableCount, StringFormat='Tables: {0}'}" Margin="5"/>
+                            <TextBlock Text="{Binding SelectedFontDescriptor.FileHeader.PreGlyphOffset, StringFormat='PreOff: {0:X}'}" Margin="5"/>
+                            <TextBlock Text="{Binding SelectedFontDescriptor.FileHeader.GlyphTableOffset, StringFormat='GlyphOff: {0:X}'}" Margin="5"/>
+                            <TextBlock Text="{Binding SelectedFontDescriptor.FileHeader.UnicodeOffset, StringFormat='UniOff: {0:X}'}" Margin="5"/>
+                        </WrapPanel>
+                    </StackPanel>
+
                     <!-- DataGrid View (Font Descriptor) -->
-                    <DataGrid Grid.Row="0" ItemsSource="{Binding CurrentFontItems}"
-                              AutoGenerateColumns="True" IsReadOnly="True" GridLinesVisibility="All"
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding CurrentFontItems}"
+                              AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="All"
                               BorderThickness="1" BorderBrush="Gray">
+                        <DataGrid.Columns>
+                           <DataGridTextColumn Header="Idx" Binding="{Binding Index}"/>
+                           <DataGridTextColumn Header="Char" Binding="{Binding CharDisplay}"/>
+                           <DataGridTextColumn Header="Raw Hex (V0-V3)" Binding="{Binding RowData}"/>
+                           <DataGridTextColumn Header="X" Binding="{Binding X}"/>
+                           <DataGridTextColumn Header="Y" Binding="{Binding Y}"/>
+                           <DataGridTextColumn Header="W" Binding="{Binding Width}"/>
+                           <DataGridTextColumn Header="H" Binding="{Binding Height}"/>
+                           <DataGridTextColumn Header="Aux" Binding="{Binding Aux}"/>
+                           <DataGridTextColumn Header="Extra (A,B,C,D)" Binding="{Binding ExtraData}"/>
+                        </DataGrid.Columns>
                     </DataGrid>
     
                     <!-- Atlas View (Font Descriptor) -->
-                     <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                     <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
                          <ItemsControl ItemsSource="{Binding CurrentFontItems}">
                              <ItemsControl.ItemsPanel>
                                  <ItemsPanelTemplate>
@@ -111,10 +142,10 @@
                              </ItemsControl.ItemsPanel>
                              <ItemsControl.ItemTemplate>
                                  <DataTemplate>
-                                     <Rectangle Width="{Binding VisualWidth}" Height="{Binding VisualHeight}"
+                                     <Rectangle Width="{Binding Width}" Height="{Binding Height}"
                                                 Stroke="Lime" StrokeThickness="1"
                                                 Fill="#3300FF00" 
-                                                Canvas.Left="{Binding VisualX}" Canvas.Top="{Binding VisualY}"
+                                                Canvas.Left="{Binding X}" Canvas.Top="{Binding Y}"
                                                 IsVisible="{Binding IsVisibleInAtlas}">
                                          <ToolTip.Tip>
                                              <StackPanel>
@@ -198,7 +229,8 @@
                                          <DataTemplate>
                                              <Rectangle Canvas.Left="{Binding X}" Canvas.Top="{Binding Y}"
                                                         Width="{Binding Width}" Height="{Binding Height}"
-                                                        Stroke="Red" StrokeThickness="1" Fill="#33FF0000">
+                                                        Stroke="Magenta" StrokeThickness="2" Fill="#20FF00FF"
+                                                        IsVisible="{Binding IsVisibleInAtlas}">
                                                  <ToolTip.Tip>
                                                      <TextBlock Text="{Binding CharDisplay}"/>
                                                  </ToolTip.Tip>

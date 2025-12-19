@@ -26,7 +26,13 @@ public static class RecordParsers
         if (record.Type != HunkRecordType.FilenameHeader) return null;
         if (record.RawData.Length < 10) return null;
 
-        using var reader = new TorusBinaryReader(record.RawData, isBigEndian);
+        // FilenameHeader is usually Little Endian even on Big Endian consoles (Wii/Xbox/PS3?)
+        // The container (chunk sizes) might follow platform rules (or not?), but the internal data for this specific record seems LE.
+        // We'll try reading with the passed endianness first? No, let's try to detect or force LE.
+        // Observed: 28 00 00 00 (40) -> LE.
+        // If we read as BE: 00 00 00 28 -> Huge.
+        // Let's force LE for this specific record type's parsing logic.
+        using var reader = new TorusBinaryReader(record.RawData, false); // Force Little Endian
 
         short v0 = reader.ReadInt16();
         short v1 = reader.ReadInt16();
@@ -158,56 +164,83 @@ public static class RecordParsers
         using var reader = new TorusBinaryReader(record.RawData, isBigEndian);
         var fd = new FontDescriptorData();
 
-        fd.Header.Z = reader.ReadInt16();
-        fd.Header.Q1 = reader.ReadUInt16();
-        fd.Header.Horizontal = reader.ReadInt16();
-        fd.Header.Q3 = reader.ReadUInt16();
-        fd.Header.Vertical = reader.ReadInt16();
-
-        fd.Header.Cnt1 = reader.ReadUInt16();
-        fd.Header.Cnt2 = reader.ReadUInt16();
-        fd.Header.Z1 = reader.ReadUInt16();
-
-        fd.Header.Signature = reader.ReadBytes(8);
-
-        fd.Header.Offset1 = reader.ReadUInt16();
-        fd.Header.Z2 = reader.ReadUInt16();
-        fd.Header.Z3 = reader.ReadUInt16();
-        fd.Header.Z4 = reader.ReadUInt16();
-        fd.Header.Offset2 = reader.ReadUInt16();
-        fd.Header.Z5 = reader.ReadUInt16();
-
-        int dataStartOffset = fd.Header.Signature[4];
-        if (dataStartOffset < 36) dataStartOffset = 36;
-
-        reader.Seek(dataStartOffset, SeekOrigin.Begin);
-
-        // Read Rows (cnt1)
-        for (int i = 0; i < fd.Header.Cnt1; i++)
+        // 1. Platform Header (Follows file endianness)
+        fd.PlatformHeader = new TSEPlatformHeader
         {
-            var row = new GlyphMetrics();
-            row.Value1 = reader.ReadUInt16();
-            row.Value2 = reader.ReadUInt16();
-            row.Width = reader.ReadInt16();
-            row.Aux = reader.ReadInt16();
-            fd.Rows.Add(row);
+            FlagsOrVersion = reader.ReadUInt16(),
+            EmOrLineHeight = reader.ReadUInt16(),
+            GlobalMinX = reader.ReadInt16(),
+            SomethingSize = reader.ReadUInt16(),
+            GlobalMinY = reader.ReadInt16(),
+            GlyphCount = reader.ReadUInt16(),
+            GlyphDataCount = reader.ReadUInt16(),
+            Unk7 = reader.ReadUInt16()
+        };
+
+        // 2. Main LE Header (Always Little Endian)
+        // We need a reader that forces Little Endian.
+        // If the original reader is BE, we need a new one or manual toggle.
+        // TorusBinaryReader doesn't seem to support switching on the fly easily, 
+        // so we'll instantiate a new one with isBigEndian=false.
+        // We must preserve position. Current pos is 16.
+
+        using var leReader = new TorusBinaryReader(record.RawData, false); // Force LE
+        leReader.Seek(16, SeekOrigin.Begin);
+
+        fd.FileHeader = new TSEFileHeaderLE
+        {
+            TableCount = leReader.ReadUInt32(),
+            PreGlyphOffset = leReader.ReadUInt32(),
+            GlyphTableOffset = leReader.ReadUInt32(),
+            Reserved0 = leReader.ReadUInt32(),
+            UnicodeOffset = leReader.ReadUInt32()
+        };
+
+        // 3. Tables
+
+        // table 1: PreGlyphs
+        if (fd.FileHeader.PreGlyphOffset > 0 && fd.FileHeader.PreGlyphOffset < record.RawData.Length)
+        {
+            leReader.Seek(fd.FileHeader.PreGlyphOffset, SeekOrigin.Begin);
+            for (int i = 0; i < fd.PlatformHeader.GlyphCount; i++)
+            {
+                fd.PreGlyphs.Add(new TSEPreGlyphEntry
+                {
+                    V0 = leReader.ReadUInt16(),
+                    V1 = leReader.ReadUInt16(),
+                    V2 = leReader.ReadUInt16(),
+                    V3 = leReader.ReadUInt16()
+                });
+            }
         }
 
-        // Read Extras (cnt2)
-        for (int i = 0; i < fd.Header.Cnt2; i++)
+        // table 2: Glyphs
+        if (fd.FileHeader.GlyphTableOffset > 0 && fd.FileHeader.GlyphTableOffset < record.RawData.Length)
         {
-            var extra = new FontExtra();
-            extra.Data = reader.ReadBytes(8);
-            fd.Extras.Add(extra);
+            leReader.Seek(fd.FileHeader.GlyphTableOffset, SeekOrigin.Begin);
+            for (int i = 0; i < fd.PlatformHeader.GlyphDataCount; i++)
+            {
+                fd.Glyphs.Add(new TSEGlyphEntry
+                {
+                    A = leReader.ReadInt16(),
+                    B = leReader.ReadInt16(),
+                    C = leReader.ReadInt16(),
+                    D = leReader.ReadInt16()
+                });
+            }
         }
 
-        // Read Tuples (cnt1) - These are UShorts, so Endianness matters!
-        for (int i = 0; i < fd.Header.Cnt1; i++)
+        // table 3: Codepoints
+        if (fd.FileHeader.UnicodeOffset > 0 && fd.FileHeader.UnicodeOffset < record.RawData.Length)
         {
-            var tuple = new FontTuple();
-            tuple.CharId = reader.ReadUInt16();
-            tuple.Zero = reader.ReadUInt16();
-            fd.Tuples.Add(tuple);
+            leReader.Seek(fd.FileHeader.UnicodeOffset, SeekOrigin.Begin);
+            for (int i = 0; i < fd.PlatformHeader.GlyphCount; i++)
+            {
+                fd.Codepoints.Add(new TSECodepoint
+                {
+                    Code = leReader.ReadUInt32()
+                });
+            }
         }
 
         return fd;

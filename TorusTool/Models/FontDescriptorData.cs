@@ -5,63 +5,58 @@ namespace TorusTool.Models;
 
 public class FontDescriptorData
 {
-    public FontDescriptorHeader Header { get; set; } = new();
-    public List<GlyphMetrics> Rows { get; set; } = new();
-    public List<FontExtra> Extras { get; set; } = new();
-    public List<FontTuple> Tuples { get; set; } = new();
+    public TSEPlatformHeader PlatformHeader { get; set; }
+    public TSEFileHeaderLE FileHeader { get; set; }
+
+    public List<TSEPreGlyphEntry> PreGlyphs { get; set; } = new();
+    public List<TSEGlyphEntry> Glyphs { get; set; } = new();
+    public List<TSECodepoint> Codepoints { get; set; } = new();
 }
 
-public class FontDescriptorHeader
+public struct TSEPlatformHeader
 {
-    public short Z { get; set; }
-    public ushort Q1 { get; set; }
-    public short Horizontal { get; set; } // Horizontal spacing/shift?
-    public ushort Q3 { get; set; }
-    public short Vertical { get; set; } // Vertical shift
-
-    public ushort Cnt1 { get; set; }
-    public ushort Cnt2 { get; set; }
-    public ushort Z1 { get; set; }
-
-    public byte[] Signature { get; set; } = new byte[8];
-
-    public ushort Offset1 { get; set; }
-    public ushort Z2 { get; set; }
-    public ushort Z3 { get; set; }
-    public ushort Z4 { get; set; }
-    public ushort Offset2 { get; set; }
-    public ushort Z5 { get; set; }
+    public ushort FlagsOrVersion { get; set; }
+    public ushort EmOrLineHeight { get; set; }
+    public short GlobalMinX { get; set; }
+    public ushort SomethingSize { get; set; }
+    public short GlobalMinY { get; set; }
+    public ushort GlyphCount { get; set; }
+    public ushort GlyphDataCount { get; set; }
+    public ushort Unk7 { get; set; }
 }
 
-public class GlyphMetrics
+public struct TSEFileHeaderLE
 {
-    // Replaced raw bytes with explicit shorts for Endian support
-    public ushort Value1 { get; set; }
-    public ushort Value2 { get; set; }
-    public short Width { get; set; }
-    public short Aux { get; set; }
-
-    public string HexDisplay => $"{Value1:X4}-{Value2:X4}-{Width:X4}-{Aux:X4}";
-    public string ShortsDisplay => $"{Value1}, {Value2}, {Width}, {Aux}";
+    public uint TableCount { get; set; }
+    public uint PreGlyphOffset { get; set; }
+    public uint GlyphTableOffset { get; set; }
+    public uint Reserved0 { get; set; }
+    public uint UnicodeOffset { get; set; }
 }
 
-public class FontExtra
+public struct TSEPreGlyphEntry
 {
-    public byte[] Data { get; set; } = new byte[8];
-    public string HexDisplay => BitConverter.ToString(Data);
+    public ushort V0 { get; set; }
+    public ushort V1 { get; set; }
+    public ushort V2 { get; set; }
+    public ushort V3 { get; set; }
 
-    public short S1 => BitConverter.ToInt16(Data, 0);
-    public short S2 => BitConverter.ToInt16(Data, 2);
-    public short S3 => BitConverter.ToInt16(Data, 4);
-    public short S4 => BitConverter.ToInt16(Data, 6);
-
-    public string ShortsDisplay => $"{S1}, {S2}, {S3}, {S4}";
+    public string HexDisplay => $"{V0:X4}-{V1:X4}-{V2:X4}-{V3:X4}";
 }
 
-public class FontTuple
+public struct TSEGlyphEntry
 {
-    public ushort CharId { get; set; }
-    public ushort Zero { get; set; }
+    public short A { get; set; }
+    public short B { get; set; }
+    public short C { get; set; }
+    public short D { get; set; }
 
-    public string CharDisplay => $"{(char)CharId} (0x{CharId:X})";
+    public string ShortsDisplay => $"{A}, {B}, {C}, {D}";
+}
+
+public struct TSECodepoint
+{
+    public uint Code { get; set; }
+
+    public string CharDisplay => $"{(char)Code} (0x{Code:X})";
 }

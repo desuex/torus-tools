@@ -61,7 +61,7 @@ class Program
         }
 
         var parser = new HunkFileParser();
-        bool isBigEndian = testFile.Contains("PS3") || testFile.Contains("WII");
+        bool isBigEndian = testFile.ToLower().Contains("ps3") || testFile.ToLower().Contains("wii") || testFile.ToLower().Contains("xbox");
         Console.WriteLine($"Detecting Endianness: {(isBigEndian ? "Big Endian" : "Little Endian")}");
 
         try
@@ -70,11 +70,11 @@ class Program
             var records = parser.Parse(testFile);
             var tree = HunkFileTreeBuilder.BuildTree(records);
 
-            Console.WriteLine("Searching for 'tokentofontmap'...");
+            Console.WriteLine("Searching for 'tokentofontmap' or 'font'...");
 
             void InspectNode(HunkFileTreeNode node)
             {
-                if (node.Name.ToLower().Contains("tokentofontmap") || node.Name.ToLower().Contains("ghoulhairstyles"))
+                if (node.Name.ToLower().Contains("font") || node.Name.ToLower().Contains("global") || node.Name.ToLower().Contains("tokentofontmap"))
                 {
                     Console.WriteLine($"\n--- Inspecting Node: {node.Name} ---");
                     // Print all records in this node to see structure
@@ -97,11 +97,21 @@ class Program
                                 else
                                 {
                                     Console.WriteLine("  -> No strings found (Binary Table).");
-                                    if (dt.ElementRawData.Any())
-                                    {
-                                        Console.WriteLine($"  -> Split into {dt.ElementRawData.Count} binary elements (Length={dt.ElementRawData[0].Length})");
-                                        Console.WriteLine($"     - Element 0: {BitConverter.ToString(dt.ElementRawData[0])}");
-                                    }
+                                }
+                            }
+                        }
+                        else if (r.Type == HunkRecordType.TSEFontDescriptorData)
+                        {
+                            var fd = RecordParsers.ParseFontDescriptor(r, isBigEndian);
+                            if (fd != null)
+                            {
+                                Console.WriteLine($"  -> Parsed FontDescriptor!");
+                                Console.WriteLine($"     Header: Flag={fd.PlatformHeader.FlagsOrVersion}, Height={fd.PlatformHeader.EmOrLineHeight}, Count={fd.PlatformHeader.GlyphCount}");
+                                Console.WriteLine($"     FileHdr: PreGlyphs={fd.FileHeader.PreGlyphOffset}, Glyphs={fd.FileHeader.GlyphTableOffset}");
+                                if (fd.PreGlyphs.Count > 0)
+                                {
+                                    var first = fd.PreGlyphs[0];
+                                    Console.WriteLine($"     First PreGlyph: {first.V0}, {first.V1}, {first.V2}, {first.V3}");
                                 }
                             }
                         }

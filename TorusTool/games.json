@@ -10,5 +10,17 @@
         "Name": "Monster High: New Ghoul in School (PS3)",
         "Platform": "PS3",
         "IsBigEndian": true
+    },
+    {
+        "Id": "MHNGIS_WII",
+        "Name": "Monster High: New Ghoul in School (Wii)",
+        "Platform": "Wii",
+        "IsBigEndian": true
+    },
+    {
+        "Id": "MHNGIS_XBOX",
+        "Name": "Monster High: New Ghoul in School (Xbox 360)",
+        "Platform": "Xbox",
+        "IsBigEndian": true
     }
 ]
