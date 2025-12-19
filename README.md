@@ -4,14 +4,14 @@ Torus Games Assets Tool is a tool for extracting and analyzing assets from Torus
 Still in active development. 
 
 Currently supported games:
-- Monster High New Ghoul in School (Windows, PS3)
+- Monster High New Ghoul in School (Windows, PS3, Wii, Xbox 360)
 
 ### Features
 - **File Viewer**: Inspect content of `.hnk` archives (Textures, Strings, Fonts, etc.).
 - **Export/Import**: Unpack `.hnk` files to edit their contents and repack them for use in-game.
   - Supports resizing files.
   - Generates human-readable structure.
-  - Handles Big Endian (PS3/Wii) and Little Endian (PC) automatically.
+  - Handles Big Endian (PS3/Wii/Xbox 360) and Little Endian (PC) automatically.
 
 ### Usage
 
