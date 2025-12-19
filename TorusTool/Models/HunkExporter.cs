@@ -29,15 +29,18 @@ public class HunkExporter
         string dataDir = Path.Combine(outputDir, "data");
         Directory.CreateDirectory(dataDir);
 
-        bool isBigEndian = hnkPath.Contains("PS3") || hnkPath.Contains("WII");
+        // Platform detection for metadata ONLY
+        bool isPlatformBigEndian = hnkPath.Contains("PS3") || hnkPath.Contains("WII");
 
+        // HNK Container is ALWAYS Little Endian (based on verification findings)
+        // Only internal content (textures, tables) respects platform endianness.
         var parser = new HunkFileParser();
-        var records = parser.Parse(hnkPath, isBigEndian).ToList();
+        var records = parser.Parse(hnkPath, false).ToList(); // Force LE
         var tree = HunkFileTreeBuilder.BuildTree(records);
 
         var manifest = new HunkManifest
         {
-            IsBigEndian = isBigEndian,
+            IsBigEndian = false, // Container is LE.
             GameName = gameName,
             OriginalFileName = Path.GetFileName(hnkPath),
             Platform = platform,
@@ -87,21 +90,11 @@ public class HunkExporter
                 {
                     var record = node.Records[i];
 
-                    // Naming strategy: {RecordType}_{ShortGuid}.bin or just {RecordType}_{Index}.bin
-                    // User Example: ./TSETexture/MHTitle_de/guid-here.bin
-                    // Current Relative Path would be TSETexture/MHTitle_de (if tree matches)
-                    // We just need a filename.
-                    // Let's use Type_Index prefix for clarity, plus Guid for uniqueness/safety.
-
+                    // Naming strategy: {RecordType}_{Index}_{GUID}.bin
                     string filename = $"{record.Type}_{i}_{Guid.NewGuid().ToString("N").Substring(0, 8)}.bin";
                     string fullPath = Path.Combine(fileDir, filename);
 
                     File.WriteAllBytes(fullPath, record.RawData);
-
-                    // Compute relative path for manifest (needs to be relative to output root, which contains data/)
-                    // rootDataDir is output/data
-                    // fileDir is output/data/Folder/File
-                    // DataFile should be data/Folder/File/filename
 
                     string relativeDataPath = Path.Combine("data", nextRelativePath, filename);
 
