@@ -1,0 +1,131 @@
+//------------------------------------------------
+//--- 010 Editor v16.0 Binary Template
+//
+//      File: TSEFontDescriptor.bt
+//    Author: desuex <hire@dsxm.org>
+//   Version: 0.1
+//   Purpose: Parse TSE Font Descriptor files used 
+//            in multiple Torus Games games (PC, PS3, Wii, Xbox, 3DS, and others)
+//            to describe bitmap/signed-distance-field
+//            glyph atlases for fonts and UI icons.
+//  Category: Fonts / Game UI
+// File Mask: *.bin;*TSEFontDescriptor*
+//  ID Bytes: (no fixed signature; structure-based)
+//   History:
+//     0.1   2025-12-20  Initial reverse-engineered release
+//------------------------------------------------
+
+RequiresVersion( 14 );
+// 0 = little-endian, 1 = big-endian
+#define TSE_PLATFORM_BE 0
+
+
+//================================================
+// 0. Platform Header (0x0000–0x000F)
+//================================================
+
+if( TSE_PLATFORM_BE )
+    BigEndian();
+else
+    LittleEndian();
+
+// 8 * 16-bit fields
+struct TSEPlatformHeader
+{
+    uint16 versionOrFlags;  // 0
+    uint16 lineHeight;      // 54 (3DS) / 96 (HD) - line height/EM
+    int16  bboxMinX;        // -44 / -68
+    uint16 ascender;        // 10 / 28  - ascent
+    int16  bboxMinY;        // -34 / -40
+
+    uint16 glyphCount;      // 279 / 322
+    uint16 glyphDataCount;  // 3680 / 3792
+    uint16 reserved;        // 0
+};
+
+TSEPlatformHeader platformHdr;
+
+
+//================================================
+// 1. Pointer Header (0x0010–0x0023)
+//================================================
+
+LittleEndian();
+
+struct TSEPointerHeader
+{
+    uint32 tableCount;       // 4
+    uint32 preGlyphOffset;   // 0x24
+    uint32 glyphDataOffset;  // 0x0A34
+    uint32 reserved0;        // 0
+    uint32 codepointOffset;  // 0x80B4
+};
+
+TSEPointerHeader hdr;
+
+local uint32 preTableOffset    = hdr.preGlyphOffset;
+local uint32 glyphTableOffset  = hdr.glyphDataOffset;
+local uint32 codepointOffset   = hdr.codepointOffset;
+local uint32 fileSize          = FileSize();
+
+local uint32 preTableSize   = glyphTableOffset   - preTableOffset;
+local uint32 glyphTableSize = codepointOffset    - glyphTableOffset;
+local uint32 codepointSize  = fileSize           - codepointOffset;
+
+local uint32 preCount   = platformHdr.glyphCount;
+local uint32 glyphCount = platformHdr.glyphDataCount;
+local uint32 cpCount    = platformHdr.glyphCount;
+
+// Optional checks
+// if( preTableSize != preCount * 8 )  Warning("preGlyph size mismatch");
+// if( glyphTableSize != glyphCount * 8 ) Warning("glyphData size mismatch");
+// if( codepointSize != cpCount * 4 )  Warning("codepoints size mismatch");
+
+//================================================
+// 2. First table: preGlyphs[preCount] (8 bytes)
+//================================================
+
+struct TSEPreGlyphEntry
+{
+    uint16 field0;
+    uint16 field1;
+    int16  field2;
+    int16  field3;
+};
+
+FSeek( preTableOffset );
+TSEPreGlyphEntry preGlyphs[ preCount ];
+
+
+//================================================
+// 3. Second table: glyphs[glyphCount] (8 bytes)
+//================================================
+
+struct TSEGlyphData
+{
+    uint16 glyphIndex;   // to which glyph this element belongs (0..preCount-1)
+    uint16 elementId;    // unique ID / primitive index
+    int16  param1;       // offsets/coordinates
+    int16  param2;       // offsets/flags
+};
+
+FSeek( glyphTableOffset );
+TSEGlyphData glyphs[ glyphCount ];
+
+
+//================================================
+// 4. Third table: codepoints[cpCount] (4 bytes, platform-endian)
+//================================================
+
+if( TSE_PLATFORM_BE )
+    BigEndian();
+else
+    LittleEndian();
+
+struct TSECodepointEntry
+{
+    uint32 characterId;  // Unicode / internal character ID
+};
+
+FSeek( codepointOffset );
+TSECodepointEntry codepoints[ cpCount ];
