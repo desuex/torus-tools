@@ -1,0 +1,71 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:TorusTool.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="500"
+        x:Class="TorusTool.Views.Tools3DSWindow"
+        x:DataType="vm:Tools3DSViewModel"
+        Title="3DS Tools" Width="600" Height="500" WindowStartupLocation="CenterOwner" CanResize="False">
+
+    <Design.DataContext>
+        <vm:Tools3DSViewModel/>
+    </Design.DataContext>
+
+    <DockPanel Margin="20">
+        <!-- Bottom Buttons -->
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,10,0,0">
+             <Button Command="{Binding UnpackCommand}" Content="Unpack" Width="80"/>
+             <Button Command="{Binding RepackCommand}" Content="Repack" Width="80"/>
+             <Button Command="{Binding CloseCommand}" CommandParameter="{Binding $parent[Window]}" Content="Close" Width="80"/>
+        </StackPanel>
+
+        <!-- Main Content -->
+        <StackPanel Spacing="15">
+            <!-- Game Selector -->
+            <StackPanel Spacing="5">
+                <TextBlock Text="Game Configuration" FontWeight="Bold"/>
+                <ComboBox ItemsSource="{Binding AvailableGames}" SelectedItem="{Binding SelectedGame}" HorizontalAlignment="Stretch">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Name}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </StackPanel>
+
+            <!-- HunkFiles Dir -->
+             <StackPanel Spacing="5">
+                <TextBlock Text="Hunkfiles Directory (Folder with .hnk/.files)" FontWeight="Bold"/>
+                <Grid ColumnDefinitions="*, Auto">
+                    <TextBox Text="{Binding HunkFilesPath}" IsReadOnly="True" Margin="0,0,10,0"/>
+                    <Button Grid.Column="1" Command="{Binding BrowseHunkDirCommand}" 
+                            CommandParameter="{Binding $parent[Window].StorageProvider}" Content="Browse..."/>
+                </Grid>
+            </StackPanel>
+
+            <!-- Packfile Path -->
+             <StackPanel Spacing="5">
+                <TextBlock Text="Packfile Path (packfile.dat)" FontWeight="Bold"/>
+                <Grid ColumnDefinitions="*, Auto">
+                    <TextBox Text="{Binding PackfilePath}" IsReadOnly="True" Margin="0,0,10,0"/>
+                    <Button Grid.Column="1" Command="{Binding BrowsePackfileCommand}" 
+                             CommandParameter="{Binding $parent[Window].StorageProvider}" Content="Browse..."/>
+                </Grid>
+            </StackPanel>
+
+            <!-- Overwrite -->
+            <CheckBox IsChecked="{Binding Overwrite}" Content="Overwrite existing files/output"/>
+
+            <!-- Progress -->
+            <StackPanel Spacing="5">
+                <TextBlock Text="Progress"/>
+                <ProgressBar Minimum="0" Maximum="{Binding ProgressMax}" Value="{Binding ProgressValue}" Height="20"/>
+            </StackPanel>
+
+            <!-- Status Log -->
+            <TextBox Text="{Binding StatusLog}" Height="100" AcceptsReturn="True" TextWrapping="Wrap" IsReadOnly="True" FontFamily="Consolas"/>
+            
+        </StackPanel>
+    </DockPanel>
+</Window>

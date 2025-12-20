@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using System.Linq;
@@ -207,6 +208,53 @@ public partial class MainWindowViewModel : ViewModelBase
         CurrentDataTableItems.Clear();
         CurrentTextureImage = null;
         if (value == null) return;
+
+        // Packfile Lazy Load
+        if (value.PackEntry != null && value.Records.Count == 0)
+        {
+           try
+           {
+               var data = TorusTool.IO.PackfileReader.ExtractFile(CurrentFile, value.PackEntry);
+               
+               // Try to parse as Hunk
+               // Only if extension is hnk? Or always try?
+               // If extension is 'dat' or 'zdat' it might not be a hunk file (e.g. raw texture or unknown).
+               // But 'languageselection.hnk' is definitely a hunk file.
+               
+               bool tryParse = value.PackEntry.SuggestedExtension.Contains("hnk");
+               
+               if (tryParse)
+               {
+                   using var ms = new System.IO.MemoryStream(data);
+                   // Hunk files inside PCK might be BE or LE.
+                   // For 3DS, we assume content is also LE?
+                   // The main tool config 'IsBigEndian' should dictate how we interpret the CONTENTS (records).
+                   // But the container format (Hunkfile headers) itself?
+                   // Usually follows the same endianness.
+                   // Let's assume 'IsBigEndian' setting is correct for the content.
+                   var records = _parser.Parse(ms, IsBigEndian).ToList();
+                   
+                   if (records.Any())
+                   {
+                       foreach (var r in records) value.Records.Add(r);
+                   }
+                   else
+                   {
+                       // Failed to parse or empty, treat as raw
+                       value.Records.Add(new HunkRecord { Type = HunkRecordType.Empty, RawData = data, Size = (uint)data.Length });
+                   }
+               }
+               else
+               {
+                    // Treat as raw file
+                    value.Records.Add(new HunkRecord { Type = HunkRecordType.Empty, RawData = data, Size = (uint)data.Length });
+               }
+           }
+           catch (Exception ex)
+           {
+                System.Diagnostics.Debug.WriteLine($"Error extracting pack entry: {ex}");
+           }
+        }
 
         // Check for DataTable
         var dtRecord = value.Records.FirstOrDefault(r => r.Type == HunkRecordType.TSEDataTableData1 || r.Type == HunkRecordType.TSEDataTableData2);
@@ -487,6 +535,11 @@ public partial class MainWindowViewModel : ViewModelBase
     private Avalonia.Media.Imaging.Bitmap? DecodeTexture(TextureHeader header, byte[] data)
     {
         // Add DDS Header
+        if (header.Format.StartsWith("3DS_"))
+        {
+             return Torus3DSTextureDecoder.Decode(header.Width, header.Height, header.Format, data);
+        }
+
         var ddsHeader = CreateDDSHeader(header.Width, header.Height, header.Format);
         // If Big Endian (PS3), we initially thought we needed to swap DXT data.
         // However, it turns out the DXT Payload is Little Endian (Standard) even on PS3.
@@ -699,7 +752,7 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             Title = "Open .hnk File",
             AllowMultiple = false,
-            FileTypeFilter = new[] { new FilePickerFileType("Hunk Files") { Patterns = new[] { "*.hnk" } } }
+            FileTypeFilter = new[] { new FilePickerFileType("Supported Files") { Patterns = new[] { "*.hnk", "*.dat" } } }
         });
 
         if (files.Count >= 1)
@@ -727,11 +780,45 @@ public partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            var records = _parser.Parse(path, false); // Container is always LE
-            var tree = HunkFileTreeBuilder.BuildTree(records);
-            foreach (var node in tree)
+            // Detect Packfile
+            bool isPackfile = false;
+            // Check magic
+            using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-                RootNodes.Add(node);
+                var buf = new byte[4];
+                if (fs.Read(buf, 0, 4) == 4)
+                {
+                    if (buf[0] == 'P' && buf[1] == 'A' && buf[2] == 'K' && buf[3] == 0)
+                    {
+                        isPackfile = true;
+                    }
+                }
+            }
+
+            if (isPackfile)
+            {
+                var pack = TorusTool.IO.PackfileReader.Read(path);
+                foreach (var entry in pack.Entries)
+                {
+                    var node = new HunkFileTreeNode
+                    {
+                        Name = entry.DisplayName,
+                        FullPath = $"{path}/{entry.DisplayName}",
+                        IsFolder = false,
+                        PackEntry = entry
+                    };
+                    // Determine if it's a "known" type based on extension?
+                    RootNodes.Add(node);
+                }
+            }
+            else
+            {
+                var records = _parser.Parse(path, false); // Container is always LE
+                var tree = HunkFileTreeBuilder.BuildTree(records);
+                foreach (var node in tree)
+                {
+                    RootNodes.Add(node);
+                }
             }
         }
         catch (Exception ex)
@@ -798,6 +885,12 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         return sb.ToString();
+    }
+    [RelayCommand]
+    public void OpenTools3DS(Avalonia.Controls.Window owner)
+    {
+        var window = new TorusTool.Views.Tools3DSWindow();
+        window.ShowDialog(owner);
     }
 }
 

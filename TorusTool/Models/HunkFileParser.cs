@@ -13,24 +13,37 @@ public class HunkFileParser
             yield break;
 
         using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-        using var reader = new TorusBinaryReader(fs, isBigEndian);
+        foreach (var record in Parse(fs, isBigEndian))
+        {
+            yield return record;
+        }
+    }
+
+    public IEnumerable<HunkRecord> Parse(Stream stream, bool isBigEndian = false)
+    {
+        // Don't dispose the stream here, caller owns it if passed in
+        // But TorusBinaryReader doesn't dispose stream unless Dispose is called, which we might do via 'using' on reader?
+        // TorusBinaryReader.Dispose disposes the underlying BinaryReader which disposes the stream.
+        // So we should be careful. 
+        // If we duplicate the logic, it's safer.
+        // OR we make TorusBinaryReader not dispose stream? 
+        // Typically BinaryReader disposes stream.
+        // Let's use 'leaveOpen' if available? BinaryReader has it.
+        // TorusBinaryReader constructors don't expose leaveOpen.
+        // For now, let's assume this method consumes the stream if we wrap it in TorusBinaryReader.
+        
+        // Actually, let's copy the logic to avoid ownership issues or update TorusBinaryReader.
+        // Or just let it dispose if we pass a MemoryStream (who cares).
+        
+        using var reader = new TorusBinaryReader(stream, isBigEndian);
 
         while (reader.Position < reader.Length)
         {
-            // The python code reads:
-            // int1 = fp.read(4) (Size)
-            // int2 = fp.read(4) (Type)
-            // data = fp.read(size)
-
             if (reader.Position + 4 > reader.Length) break;
             uint size = reader.ReadUInt32();
 
             if (reader.Position + 4 > reader.Length) break;
             uint typeInt = reader.ReadUInt32();
-            
-            // Validate size to avoid huge allocations on bad reads? Python didn't seem to care but for safety:
-            // IF size is massive relative to file remainder, it might be corrupt, but we'll trust the format for now.
-            // Note: size can be 0.
             
             byte[] data = Array.Empty<byte>();
             if (size > 0)
@@ -40,7 +53,6 @@ public class HunkFileParser
                    // Truncated file or bad read
                    break;
                }
-               // ReadBytes is simple read.
                data = reader.ReadBytes((int)size);
             }
 

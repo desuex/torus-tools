@@ -6,7 +6,8 @@ public enum PlatformType
     PS3,
     Wii360,
     Xbox,
-    Wii
+    Wii,
+    Nintendo3DS
 }
 
 public class GameConfig

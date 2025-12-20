@@ -329,6 +329,7 @@ public static class RecordParsers
         else if (b0 == 0xD3 && b1 == 0x3A) tex.Format = "DXT5";
         else if (b0 == 0x9F && b1 == 0xBC) tex.Format = "DXT5"; // PS3 DXT5 variant/endian-swap
         else if (b0 == 0x6F && b1 == 0x74) tex.Format = "R8G8B8A8";
+        else if (b0 == 0x21 && b1 == 0x71) tex.Format = "3DS_L8"; // PICA200 L8 Swizzled
         else tex.Format = "DXT1";
 
         return tex;
