@@ -38,6 +38,10 @@ class Program
                     new HunkImporter().Import(args[1], args[2]);
                     Console.WriteLine("Import complete.");
                     break;
+                case "testpck":
+                    if (args.Length < 2) { Console.WriteLine("Missing file path"); return; }
+                    VerifyPackfile(args[1]);
+                    break;
                 default:
                     Console.WriteLine("Unknown command.");
                     break;
@@ -127,6 +131,36 @@ class Program
         {
             Console.WriteLine($"Exception: {ex.Message}");
             Console.WriteLine(ex.StackTrace);
+        }
+    }
+
+    static void VerifyPackfile(string path)
+    {
+        Console.WriteLine($"Testing Packfile: {path}");
+        try
+        {
+            var pack = TorusTool.IO.PackfileReader.Read(path);
+            Console.WriteLine($"Found {pack.Entries.Count} entries.");
+            
+            int limit = 5;
+            foreach (var entry in pack.Entries.Take(limit))
+            {
+                Console.WriteLine($"Entry: {entry.DisplayName} | Offset: {entry.Offset:X} | Size: {entry.Size} | Ext: {entry.SuggestedExtension}");
+            }
+            
+            if (pack.Entries.Any())
+            {
+                var first = pack.Entries.First();
+                Console.WriteLine($"Extracting first entry: {first.DisplayName}...");
+                var bytes = TorusTool.IO.PackfileReader.ExtractFile(path, first);
+                Console.WriteLine($"Extracted {bytes.Length} bytes.");
+                string head = BitConverter.ToString(bytes.Take(Math.Min(bytes.Length, 16)).ToArray());
+                Console.WriteLine($"Head: {head}");
+            }
+        }
+        catch (Exception ex)
+        {
+             Console.WriteLine($"Error: {ex}");
         }
     }
 }

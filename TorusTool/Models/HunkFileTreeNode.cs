@@ -12,4 +12,7 @@ public class HunkFileTreeNode
 
     // For binding convenience
     public string Icon => IsFolder ? "📁" : "📄";
+    
+    // For Packfile support
+    public PackfileEntry? PackEntry { get; set; }
 }

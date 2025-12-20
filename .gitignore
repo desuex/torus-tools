@@ -6,3 +6,5 @@ TorusTool.Verification/obj/*
 .DS_Store
 *.bin
 *.hnk
+Probe/bin/*
+Probe/obj/*
