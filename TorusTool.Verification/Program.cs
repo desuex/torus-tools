@@ -42,6 +42,10 @@ class Program
                     if (args.Length < 2) { Console.WriteLine("Missing file path"); return; }
                     VerifyPackfile(args[1]);
                     break;
+                case "testfont":
+                    if (args.Length < 2) { Console.WriteLine("Missing file path"); return; }
+                    VerifyFontBinary(args[1]);
+                    break;
                 default:
                     Console.WriteLine("Unknown command.");
                     break;
@@ -110,12 +114,12 @@ class Program
                             if (fd != null)
                             {
                                 Console.WriteLine($"  -> Parsed FontDescriptor!");
-                                Console.WriteLine($"     Header: Flag={fd.PlatformHeader.FlagsOrVersion}, Height={fd.PlatformHeader.EmOrLineHeight}, Count={fd.PlatformHeader.GlyphCount}");
+                                Console.WriteLine($"     Header: Ver={fd.PlatformHeader.VersionOrFlags}, LineHeight={fd.PlatformHeader.LineHeight}, Count={fd.PlatformHeader.GlyphCount}");
                                 Console.WriteLine($"     FileHdr: PreGlyphs={fd.FileHeader.PreGlyphOffset}, Glyphs={fd.FileHeader.GlyphTableOffset}");
                                 if (fd.PreGlyphs.Count > 0)
                                 {
                                     var first = fd.PreGlyphs[0];
-                                    Console.WriteLine($"     First PreGlyph: {first.V0}, {first.V1}, {first.V2}, {first.V3}");
+                                    Console.WriteLine($"     First PreGlyph: {first.Field0}, {first.Field1}, {first.Field2}, {first.Field3}");
                                 }
                             }
                         }
@@ -141,13 +145,13 @@ class Program
         {
             var pack = TorusTool.IO.PackfileReader.Read(path);
             Console.WriteLine($"Found {pack.Entries.Count} entries.");
-            
+
             int limit = 5;
             foreach (var entry in pack.Entries.Take(limit))
             {
                 Console.WriteLine($"Entry: {entry.DisplayName} | Offset: {entry.Offset:X} | Size: {entry.Size} | Ext: {entry.SuggestedExtension}");
             }
-            
+
             if (pack.Entries.Any())
             {
                 var first = pack.Entries.First();
@@ -160,7 +164,40 @@ class Program
         }
         catch (Exception ex)
         {
-             Console.WriteLine($"Error: {ex}");
+            Console.WriteLine($"Error: {ex}");
+        }
+    }
+
+    static void VerifyFontBinary(string path)
+    {
+        Console.WriteLine($"Testing Font Binary: {path}");
+        try
+        {
+            var data = System.IO.File.ReadAllBytes(path);
+            var record = new HunkRecord { RawData = data, Type = HunkRecordType.TSEFontDescriptorData };
+
+            var fd = RecordParsers.ParseFontDescriptor(record, false);
+            if (fd == null)
+            {
+                // Try variant
+                record.Type = HunkRecordType.TSEFontDescriptorData_v1;
+                fd = RecordParsers.ParseFontDescriptor(record, false);
+            }
+
+            if (fd != null)
+            {
+                Console.WriteLine("Parse Success!");
+                Console.WriteLine($"Header: Ver={fd.PlatformHeader.VersionOrFlags}, LineHeight={fd.PlatformHeader.LineHeight}, Count={fd.PlatformHeader.GlyphCount}");
+                Console.WriteLine($"PreGlyphs: {fd.PreGlyphs.Count}, Glyphs: {fd.Glyphs.Count}, Codepoints: {fd.Codepoints.Count}");
+            }
+            else
+            {
+                Console.WriteLine("Parse Failed (returned null).");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex}");
         }
     }
 }

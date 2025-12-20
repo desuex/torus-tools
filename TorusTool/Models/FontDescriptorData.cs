@@ -15,14 +15,14 @@ public class FontDescriptorData
 
 public struct TSEPlatformHeader
 {
-    public ushort FlagsOrVersion { get; set; }
-    public ushort EmOrLineHeight { get; set; }
-    public short GlobalMinX { get; set; }
-    public ushort SomethingSize { get; set; }
-    public short GlobalMinY { get; set; }
+    public ushort VersionOrFlags { get; set; }
+    public ushort LineHeight { get; set; }
+    public short BBoxMinX { get; set; }
+    public ushort Ascender { get; set; }
+    public short BBoxMinY { get; set; }
     public ushort GlyphCount { get; set; }
     public ushort GlyphDataCount { get; set; }
-    public ushort Unk7 { get; set; }
+    public ushort Reserved { get; set; }
 }
 
 public struct TSEFileHeaderLE
@@ -36,22 +36,22 @@ public struct TSEFileHeaderLE
 
 public struct TSEPreGlyphEntry
 {
-    public ushort V0 { get; set; }
-    public ushort V1 { get; set; }
-    public ushort V2 { get; set; }
-    public ushort V3 { get; set; }
+    public ushort Field0 { get; set; }
+    public ushort Field1 { get; set; }
+    public short Field2 { get; set; }
+    public short Field3 { get; set; }
 
-    public string HexDisplay => $"{V0:X4}-{V1:X4}-{V2:X4}-{V3:X4}";
+    public string HexDisplay => $"{Field0:X4}-{Field1:X4}-{Field2:X4}-{Field3:X4}";
 }
 
 public struct TSEGlyphEntry
 {
-    public short A { get; set; }
-    public short B { get; set; }
-    public short C { get; set; }
-    public short D { get; set; }
+    public ushort GlyphIndex { get; set; } // to which glyph this element belongs
+    public ushort ElementId { get; set; } // unique ID / primitive index
+    public short Param1 { get; set; } // offsets/coordinates
+    public short Param2 { get; set; } // offsets/flags
 
-    public string ShortsDisplay => $"{A}, {B}, {C}, {D}";
+    public string Display => $"G:{GlyphIndex} E:{ElementId} P1:{Param1} P2:{Param2}";
 }
 
 public struct TSECodepoint

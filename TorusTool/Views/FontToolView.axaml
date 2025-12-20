@@ -1,0 +1,91 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:TorusTool.ViewModels"
+        xmlns:models="using:TorusTool.Models"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
+        x:Class="TorusTool.Views.FontToolView"
+        x:DataType="vm:FontToolViewModel"
+        Title="Torus Font Tool">
+
+    <Grid RowDefinitions="Auto, *, Auto">
+        <!-- Toolbar -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10" Spacing="10">
+            <Button Content="Load Manifest..." Command="{Binding LoadManifestCommand}" CommandParameter="{Binding $parent[Window].StorageProvider}"/>
+            <TextBlock Text="{Binding ManifestPath}" VerticalAlignment="Center" FontStyle="Italic"/>
+        </StackPanel>
+
+        <!-- Main Content -->
+        <Grid Grid.Row="1" ColumnDefinitions="300, 5, *">
+            <!-- List -->
+            <Border Grid.Column="0" BorderBrush="Gray" BorderThickness="1" Margin="5">
+                <ListBox ItemsSource="{Binding FoundFonts}" SelectedItem="{Binding SelectedFont}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
+                                <TextBlock Text="{Binding GlyphCount, StringFormat='Glyphs: {0}'}"/>
+                                <TextBlock Text="{Binding TextureName, StringFormat='Tex: {0}'}" FontSize="10" Foreground="Gray"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+
+            <GridSplitter Grid.Column="1" ResizeDirection="Columns"/>
+
+            <!-- Details -->
+            <ScrollViewer Grid.Column="2" Margin="5">
+                 <StackPanel Spacing="10">
+                     <TextBlock Text="{Binding SelectedFont.Name, StringFormat='Font: {0}'}" FontSize="18" FontWeight="Bold"/>
+                     
+                     <TextBlock Text="Properties" FontWeight="Bold" Margin="0,10,0,0"/>
+                     <Grid ColumnDefinitions="Auto, Auto" RowDefinitions="Auto, Auto, Auto, Auto">
+                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Glyph Count:" Margin="5"/>
+                         <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedFont.GlyphCount}" Margin="5"/>
+                         
+                         <TextBlock Grid.Row="1" Grid.Column="0" Text="Line Height:" Margin="5"/>
+                         <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedFont.LineHeight}" Margin="5"/>
+
+                         <TextBlock Grid.Row="2" Grid.Column="0" Text="Texture:" Margin="5"/>
+                         <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedFont.TextureName}" Margin="5"/>
+                         
+                         <TextBlock Grid.Row="3" Grid.Column="0" Text="Render Sprite:" Margin="5"/>
+                         <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedFont.RenderSpriteName}" Margin="5"/>
+                     </Grid>
+
+                     <!-- Detailed Header Info -->
+                      <TextBlock Text="Platform Header" FontWeight="Bold" Margin="0,20,0,0"/>
+                      <ContentControl Content="{Binding DetailViewModel.PlatformHeader}">
+                           <ContentControl.ContentTemplate>
+                               <DataTemplate x:DataType="models:TSEPlatformHeader">
+                                   <StackPanel>
+                                        <TextBlock Text="{Binding VersionOrFlags, StringFormat='Ver: {0}'}"/>
+                                        <TextBlock Text="{Binding Ascender, StringFormat='Ascender: {0}'}"/>
+                                        <TextBlock Text="{Binding BBoxMinX, StringFormat='MinX: {0}'}"/>
+                                        <TextBlock Text="{Binding BBoxMinY, StringFormat='MinY: {0}'}"/>
+                                   </StackPanel>
+                               </DataTemplate>
+                           </ContentControl.ContentTemplate>
+                      </ContentControl>
+
+                      <TextBlock Text="Glyphs" FontWeight="Bold" Margin="0,20,0,0"/>
+                      <DataGrid ItemsSource="{Binding SelectedFont.Glyphs}" Height="200" CanUserResizeColumns="True" GridLinesVisibility="All" BorderThickness="1" BorderBrush="Gray">
+                          <DataGrid.Columns>
+                              <DataGridTextColumn Header="Idx" Binding="{Binding Index}"/>
+                              <DataGridTextColumn Header="GlyphIdx" Binding="{Binding CharId}"/>
+                              <DataGridTextColumn Header="Extra" Binding="{Binding ExtraData}" Width="*"/>
+                          </DataGrid.Columns>
+                      </DataGrid>
+
+                      <TextBlock Text="RenderSprite Items" FontWeight="Bold" Margin="0,20,0,0"/>
+                      <TextBlock Text="{Binding SelectedFont.RenderSpriteData.Count, StringFormat='Count: {0}'}" Margin="5"/>
+                 </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- Status Bar -->
+        <TextBlock Grid.Row="2" Text="{Binding StatusMessage}" Margin="10,5"/>
+    </Grid>
+</Window>

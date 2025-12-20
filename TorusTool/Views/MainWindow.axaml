@@ -33,6 +33,8 @@
             </MenuItem>
             <!-- New Tools Menu -->
              <MenuItem Header="_Tools">
+                 <MenuItem Header="Font Tool..." Command="{Binding OpenFontToolCommand}"/>
+                 <Separator/>
                  <MenuItem Header="Ex_port HNK..." Command="{Binding ExportHnkCommand}" CommandParameter="{Binding $parent[Window].StorageProvider}"/>
                  <MenuItem Header="Im_port HNK..." Command="{Binding ImportHnkCommand}" CommandParameter="{Binding $parent[Window].StorageProvider}"/>
                  <Separator/>
@@ -101,10 +103,10 @@
                     <StackPanel Grid.Row="0" Orientation="Vertical" Margin="5" Background="#303030">
                         <TextBlock Text="Platform Header (0x00)" FontWeight="Bold" Margin="5"/>
                         <WrapPanel Orientation="Horizontal">
-                            <TextBlock Text="{Binding SelectedFontDescriptor.PlatformHeader.FlagsOrVersion, StringFormat='Ver: {0}'}" Margin="5"/>
-                            <TextBlock Text="{Binding SelectedFontDescriptor.PlatformHeader.EmOrLineHeight, StringFormat='LineHeight: {0}'}" Margin="5"/>
-                            <TextBlock Text="{Binding SelectedFontDescriptor.PlatformHeader.GlobalMinX, StringFormat='MinX: {0}'}" Margin="5"/>
-                            <TextBlock Text="{Binding SelectedFontDescriptor.PlatformHeader.GlobalMinY, StringFormat='MinY: {0}'}" Margin="5"/>
+                            <TextBlock Text="{Binding SelectedFontDescriptor.PlatformHeader.VersionOrFlags, StringFormat='Ver: {0}'}" Margin="5"/>
+                            <TextBlock Text="{Binding SelectedFontDescriptor.PlatformHeader.LineHeight, StringFormat='LineHeight: {0}'}" Margin="5"/>
+                            <TextBlock Text="{Binding SelectedFontDescriptor.PlatformHeader.BBoxMinX, StringFormat='MinX: {0}'}" Margin="5"/>
+                            <TextBlock Text="{Binding SelectedFontDescriptor.PlatformHeader.BBoxMinY, StringFormat='MinY: {0}'}" Margin="5"/>
                             <TextBlock Text="{Binding SelectedFontDescriptor.PlatformHeader.GlyphCount, StringFormat='Glyphs: {0}'}" Margin="5"/>
                             <TextBlock Text="{Binding SelectedFontDescriptor.PlatformHeader.GlyphDataCount, StringFormat='GlyphData: {0}'}" Margin="5"/>
                         </WrapPanel>

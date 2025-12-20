@@ -38,6 +38,7 @@ public enum HunkRecordType : int
     EffectsParamsData = 0x43112,
 
     TSEFontDescriptorData = 0x43087,
+    TSEFontDescriptorData_v1 = 0x42087,
 
     TSEDataTableData1 = 0x43083,
     TSEDataTableData2 = 0x4008a,

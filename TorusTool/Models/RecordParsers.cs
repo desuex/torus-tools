@@ -158,7 +158,7 @@ public static class RecordParsers
 
     public static FontDescriptorData? ParseFontDescriptor(HunkRecord record, bool isBigEndian = false)
     {
-        if (record.Type != HunkRecordType.TSEFontDescriptorData) return null;
+        if (record.Type != HunkRecordType.TSEFontDescriptorData && record.Type != HunkRecordType.TSEFontDescriptorData_v1) return null;
         if (record.RawData.Length < 36) return null;
 
         using var reader = new TorusBinaryReader(record.RawData, isBigEndian);
@@ -167,14 +167,14 @@ public static class RecordParsers
         // 1. Platform Header (Follows file endianness)
         fd.PlatformHeader = new TSEPlatformHeader
         {
-            FlagsOrVersion = reader.ReadUInt16(),
-            EmOrLineHeight = reader.ReadUInt16(),
-            GlobalMinX = reader.ReadInt16(),
-            SomethingSize = reader.ReadUInt16(),
-            GlobalMinY = reader.ReadInt16(),
+            VersionOrFlags = reader.ReadUInt16(),
+            LineHeight = reader.ReadUInt16(),
+            BBoxMinX = reader.ReadInt16(),
+            Ascender = reader.ReadUInt16(),
+            BBoxMinY = reader.ReadInt16(),
             GlyphCount = reader.ReadUInt16(),
             GlyphDataCount = reader.ReadUInt16(),
-            Unk7 = reader.ReadUInt16()
+            Reserved = reader.ReadUInt16()
         };
 
         // 2. Main LE Header (Always Little Endian)
@@ -206,10 +206,10 @@ public static class RecordParsers
             {
                 fd.PreGlyphs.Add(new TSEPreGlyphEntry
                 {
-                    V0 = leReader.ReadUInt16(),
-                    V1 = leReader.ReadUInt16(),
-                    V2 = leReader.ReadUInt16(),
-                    V3 = leReader.ReadUInt16()
+                    Field0 = leReader.ReadUInt16(),
+                    Field1 = leReader.ReadUInt16(),
+                    Field2 = leReader.ReadInt16(),
+                    Field3 = leReader.ReadInt16()
                 });
             }
         }
@@ -222,10 +222,10 @@ public static class RecordParsers
             {
                 fd.Glyphs.Add(new TSEGlyphEntry
                 {
-                    A = leReader.ReadInt16(),
-                    B = leReader.ReadInt16(),
-                    C = leReader.ReadInt16(),
-                    D = leReader.ReadInt16()
+                    GlyphIndex = leReader.ReadUInt16(),
+                    ElementId = leReader.ReadUInt16(),
+                    Param1 = leReader.ReadInt16(),
+                    Param2 = leReader.ReadInt16()
                 });
             }
         }

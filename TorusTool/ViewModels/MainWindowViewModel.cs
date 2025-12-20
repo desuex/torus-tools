@@ -151,7 +151,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _showHexOnly = false;
 
     // ... Checkers ...
-    private bool CheckForTexture(HunkFileTreeNode? node) => node != null && node.Records.Any(r => r.Type == HunkRecordType.TSETextureHeader || r.Type == HunkRecordType.TSETextureData);
+    private bool CheckForTexture(HunkFileTreeNode? node) => node != null && node.Records.Any(r => r.Type == HunkRecordType.TSETextureHeader || r.Type == HunkRecordType.TSETextureData || r.Type == HunkRecordType.TSETextureData2 || r.Type == HunkRecordType.TSETextureDataPS3 || r.Type == HunkRecordType.TSETextureDataWii);
 
     public bool HasTexture => CheckForTexture(SelectedNode);
     // IsTextureVisible should rely on HasTexture if we want the GRID to be visible. 
@@ -212,48 +212,48 @@ public partial class MainWindowViewModel : ViewModelBase
         // Packfile Lazy Load
         if (value.PackEntry != null && value.Records.Count == 0)
         {
-           try
-           {
-               var data = TorusTool.IO.PackfileReader.ExtractFile(CurrentFile, value.PackEntry);
-               
-               // Try to parse as Hunk
-               // Only if extension is hnk? Or always try?
-               // If extension is 'dat' or 'zdat' it might not be a hunk file (e.g. raw texture or unknown).
-               // But 'languageselection.hnk' is definitely a hunk file.
-               
-               bool tryParse = value.PackEntry.SuggestedExtension.Contains("hnk");
-               
-               if (tryParse)
-               {
-                   using var ms = new System.IO.MemoryStream(data);
-                   // Hunk files inside PCK might be BE or LE.
-                   // For 3DS, we assume content is also LE?
-                   // The main tool config 'IsBigEndian' should dictate how we interpret the CONTENTS (records).
-                   // But the container format (Hunkfile headers) itself?
-                   // Usually follows the same endianness.
-                   // Let's assume 'IsBigEndian' setting is correct for the content.
-                   var records = _parser.Parse(ms, IsBigEndian).ToList();
-                   
-                   if (records.Any())
-                   {
-                       foreach (var r in records) value.Records.Add(r);
-                   }
-                   else
-                   {
-                       // Failed to parse or empty, treat as raw
-                       value.Records.Add(new HunkRecord { Type = HunkRecordType.Empty, RawData = data, Size = (uint)data.Length });
-                   }
-               }
-               else
-               {
+            try
+            {
+                var data = TorusTool.IO.PackfileReader.ExtractFile(CurrentFile, value.PackEntry);
+
+                // Try to parse as Hunk
+                // Only if extension is hnk? Or always try?
+                // If extension is 'dat' or 'zdat' it might not be a hunk file (e.g. raw texture or unknown).
+                // But 'languageselection.hnk' is definitely a hunk file.
+
+                bool tryParse = value.PackEntry.SuggestedExtension.Contains("hnk");
+
+                if (tryParse)
+                {
+                    using var ms = new System.IO.MemoryStream(data);
+                    // Hunk files inside PCK might be BE or LE.
+                    // For 3DS, we assume content is also LE?
+                    // The main tool config 'IsBigEndian' should dictate how we interpret the CONTENTS (records).
+                    // But the container format (Hunkfile headers) itself?
+                    // Usually follows the same endianness.
+                    // Let's assume 'IsBigEndian' setting is correct for the content.
+                    var records = _parser.Parse(ms, IsBigEndian).ToList();
+
+                    if (records.Any())
+                    {
+                        foreach (var r in records) value.Records.Add(r);
+                    }
+                    else
+                    {
+                        // Failed to parse or empty, treat as raw
+                        value.Records.Add(new HunkRecord { Type = HunkRecordType.Empty, RawData = data, Size = (uint)data.Length });
+                    }
+                }
+                else
+                {
                     // Treat as raw file
                     value.Records.Add(new HunkRecord { Type = HunkRecordType.Empty, RawData = data, Size = (uint)data.Length });
-               }
-           }
-           catch (Exception ex)
-           {
+                }
+            }
+            catch (Exception ex)
+            {
                 System.Diagnostics.Debug.WriteLine($"Error extracting pack entry: {ex}");
-           }
+            }
         }
 
         // Check for DataTable
@@ -374,23 +374,26 @@ public partial class MainWindowViewModel : ViewModelBase
                         // V3: Aux
 
                         // Mapping based on previous heuristics:
-                        // Value2 (V1) -> X
-                        // Value1 (V0) -> Y
+                        // Value2 (Field1) -> X
+                        // Value1 (Field0) -> Y
 
-                        item.X = (short)((row.V1 & 0xFF) * 4);
+                        item.X = (short)((row.Field1 & 0xFF) * 4);
 
                         // item.Y logic:
-                        item.Y = (short)(((row.V0 >> 8) & 1) * 128);
+                        item.Y = (short)(((row.Field0 >> 8) & 1) * 128);
 
-                        // Width is direct (cast V2 to short)
-                        item.Width = (short)row.V2;
-                        item.Aux = (short)row.V3;
+                        // Width is direct (cast Field2 which is already short)
+                        item.Width = row.Field2;
+                        item.Aux = row.Field3;
 
 
                         // Heuristic for Height: 
                         // Q1=96 (matches L-Stick height 96).
 
-                        short globalHeight = (short)fd.PlatformHeader.EmOrLineHeight;
+                        // Heuristic for Height: 
+                        // Q1=96 (matches L-Stick height 96).
+
+                        short globalHeight = (short)fd.PlatformHeader.LineHeight;
                         if (globalHeight <= 0) globalHeight = 32;
 
                         item.Height = globalHeight;
@@ -403,7 +406,7 @@ public partial class MainWindowViewModel : ViewModelBase
                         if (extraIdx >= 0 && extraIdx < fd.Glyphs.Count)
                         {
                             var g = fd.Glyphs[extraIdx];
-                            item.ExtraData = $"{g.A}, {g.B}, {g.C}, {g.D}";
+                            item.ExtraData = $"{g.GlyphIndex}, {g.ElementId}, {g.Param1}, {g.Param2}";
                         }
                     }
 
@@ -441,7 +444,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
                 try
                 {
-                    CurrentTextureImage = DecodeTexture(header, texDataRecord.RawData);
+                    CurrentTextureImage = DecodeTexture(header, texDataRecord.RawData, texDataRecord.Type);
                 }
                 catch (Exception ex)
                 {
@@ -458,7 +461,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
                     if (fd != null)
                     {
-                        TextureInfo += $" | Hdr: V={fd.PlatformHeader.GlobalMinY}, Z={fd.PlatformHeader.FlagsOrVersion}, Q1={fd.PlatformHeader.EmOrLineHeight}, Q3={fd.PlatformHeader.SomethingSize}";
+                        TextureInfo += $" | Hdr: V={fd.PlatformHeader.BBoxMinY}, Z={fd.PlatformHeader.VersionOrFlags}, Q1={fd.PlatformHeader.LineHeight}, Q3={fd.PlatformHeader.Ascender}";
                     }
 
                     var dpadCandidates = CurrentFontItems.Where(x => Math.Abs(x.Width) >= 98 && Math.Abs(x.Width) <= 108).ToList();
@@ -532,20 +535,27 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    private Avalonia.Media.Imaging.Bitmap? DecodeTexture(TextureHeader header, byte[] data)
+    private Avalonia.Media.Imaging.Bitmap? DecodeTexture(TextureHeader header, byte[] data, HunkRecordType dataType)
     {
         // Add DDS Header
         if (header.Format.StartsWith("3DS_"))
         {
-             return Torus3DSTextureDecoder.Decode(header.Width, header.Height, header.Format, data);
+            return Torus3DSTextureDecoder.Decode(header.Width, header.Height, header.Format, data);
         }
 
         var ddsHeader = CreateDDSHeader(header.Width, header.Height, header.Format);
+
         // If Big Endian (PS3), we initially thought we needed to swap DXT data.
         // However, it turns out the DXT Payload is Little Endian (Standard) even on PS3.
         // Only the Header (Metadata) is Big Endian.
         // So we just pass the data through.
         byte[] finalData = data;
+
+        // Wii Detiling
+        if (dataType == HunkRecordType.TSETextureDataWii || (IsBigEndian && header.Format == "DXT1" && SelectedGame.Name.Contains("Wii")))
+        {
+            finalData = TorusTool.Models.WiiTextureDecoder.Detile(data, header.Width, header.Height, header.Format);
+        }
 
         var ddsData = new byte[ddsHeader.Length + finalData.Length];
         Array.Copy(ddsHeader, 0, ddsData, 0, ddsHeader.Length);
@@ -654,6 +664,17 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
 
+
+    [RelayCommand]
+    public void OpenFontTool()
+    {
+        var vm = new FontToolViewModel();
+        var win = new TorusTool.Views.FontToolView
+        {
+            DataContext = vm
+        };
+        win.Show();
+    }
 
     [RelayCommand]
     private void ExitApp()
