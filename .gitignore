@@ -9,3 +9,5 @@ TorusTool.Verification/obj/*
 Probe/bin/*
 Probe/obj/*
 Assets/*
+TorusTool.Tests/bin/*
+TorusTool.Tests/obj/*

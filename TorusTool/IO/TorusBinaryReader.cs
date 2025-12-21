@@ -15,14 +15,14 @@ public class TorusBinaryReader : IDisposable
         _reader = new BinaryReader(input);
         _isBigEndian = isBigEndian;
     }
-    
+
     public TorusBinaryReader(byte[] data, bool isBigEndian)
     {
         _reader = new BinaryReader(new MemoryStream(data));
         _isBigEndian = isBigEndian;
     }
 
-    public long Position 
+    public long Position
     {
         get => _reader.BaseStream.Position;
         set => _reader.BaseStream.Position = value;
@@ -32,7 +32,7 @@ public class TorusBinaryReader : IDisposable
 
     public byte ReadByte() => _reader.ReadByte();
     public byte[] ReadBytes(int count) => _reader.ReadBytes(count);
-    
+
     public sbyte ReadSByte() => _reader.ReadSByte();
 
     // Endian-aware reads
@@ -71,7 +71,7 @@ public class TorusBinaryReader : IDisposable
         var val = _reader.ReadUInt64();
         return _isBigEndian ? BinaryPrimitives.ReverseEndianness(val) : val;
     }
-    
+
     public float ReadSingle()
     {
         var val = _reader.ReadSingle();
@@ -84,7 +84,7 @@ public class TorusBinaryReader : IDisposable
         }
         return val;
     }
-    
+
     public string ReadStringFixed(int length)
     {
         var bytes = _reader.ReadBytes(length);
@@ -95,6 +95,16 @@ public class TorusBinaryReader : IDisposable
     public void Seek(long offset, SeekOrigin origin)
     {
         _reader.BaseStream.Seek(offset, origin);
+    }
+
+    public void Align(int alignment)
+    {
+        long pos = Position;
+        if (pos % alignment != 0)
+        {
+            long newPos = (pos + alignment - 1) / alignment * alignment;
+            Seek(newPos, SeekOrigin.Begin);
+        }
     }
 
     public void Dispose()

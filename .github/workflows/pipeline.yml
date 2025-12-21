@@ -43,6 +43,9 @@ jobs:
     - name: Build
       run: dotnet build TorusTool.sln --configuration Release --no-restore
 
+    - name: Test
+      run: dotnet test TorusTool.sln --configuration Release --no-build --filter "Category!=Integration"
+
     - name: Publish
       shell: bash
       run: |
