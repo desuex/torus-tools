@@ -79,8 +79,19 @@
                           </DataGrid.Columns>
                       </DataGrid>
 
-                      <TextBlock Text="RenderSprite Items" FontWeight="Bold" Margin="0,20,0,0"/>
-                      <TextBlock Text="{Binding SelectedFont.RenderSpriteData.Count, StringFormat='Count: {0}'}" Margin="5"/>
+                      <TextBlock Text="{Binding SelectedFont.RenderSpriteData.Count, StringFormat='Render Sprites (Count: {0})'}" FontWeight="Bold" Margin="0,20,0,0"/>
+                      <DataGrid ItemsSource="{Binding SelectedFont.RenderSpriteData.Sprites}" Height="200" CanUserResizeColumns="True" GridLinesVisibility="All" BorderThickness="1" BorderBrush="Gray">
+                          <DataGrid.Columns>
+                              <DataGridTextColumn Header="Spd/Thk" Binding="{Binding Block.SpeedOrThickness, StringFormat='0.00'}" Width="60"/>
+                              <DataGridTextColumn Header="W (Pix)" Binding="{Binding Block.Width, StringFormat='0.0'}" Width="60"/>
+                              <DataGridTextColumn Header="H (Pix)" Binding="{Binding Block.Height, StringFormat='0.0'}" Width="60"/>
+                              <DataGridTextColumn Header="UV Left" Binding="{Binding Block.UvLeft, StringFormat='0.00'}" Width="50"/>
+                              <DataGridTextColumn Header="UV Top" Binding="{Binding Block.UvTop, StringFormat='0.00'}" Width="50"/>
+                              <DataGridTextColumn Header="Idx/Ang" Binding="{Binding Block.IndexOrAngle, StringFormat='0.0'}" Width="60"/>
+                              <DataGridTextColumn Header="RingTp" Binding="{Binding Block.RingType}" Width="40"/>
+                              <DataGridTextColumn Header="Type" Binding="{Binding Block.TypeCode, StringFormat='X'}" Width="50"/>
+                          </DataGrid.Columns>
+                      </DataGrid>
                  </StackPanel>
             </ScrollViewer>
         </Grid>

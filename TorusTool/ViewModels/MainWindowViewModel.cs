@@ -74,12 +74,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsRenderSpriteVisible))]
-    private ObservableCollection<RenderSpriteItem> _currentRenderSpriteItems = new();
+    private ObservableCollection<RenderSpriteEntry> _currentRenderSpriteItems = new();
 
     public ObservableCollection<DataTableItem> CurrentDataTableItems { get; } = new();
 
     [ObservableProperty]
-    private RenderSpriteItem? _selectedRenderSpriteItem;
+    private RenderSpriteEntry? _selectedRenderSpriteItem;
 
 
     [ObservableProperty]
@@ -416,13 +416,14 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         // Check for RenderSprite
+        // Check for RenderSprite
         var spriteRecord = value.Records.FirstOrDefault(r => r.Type == HunkRecordType.TSERenderSprite);
         if (spriteRecord != null)
         {
             var rs = RecordParsers.ParseRenderSprite(spriteRecord, IsBigEndian);
             if (rs != null)
             {
-                foreach (var item in rs.Items)
+                foreach (var item in rs.Sprites)
                 {
                     CurrentRenderSpriteItems.Add(item);
                 }

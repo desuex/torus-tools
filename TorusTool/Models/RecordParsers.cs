@@ -251,58 +251,63 @@ public static class RecordParsers
         if (record.Type != HunkRecordType.TSERenderSprite) return null;
         if (record.RawData.Length < 16) return null;
 
-        using var reader = new TorusBinaryReader(record.RawData, isBigEndian);
+        // Header is always Big Endian (Count, Format)
+        using var headerReader = new TorusBinaryReader(record.RawData, true);
 
         var rs = new RenderSpriteData();
-        rs.Count = reader.ReadInt32();
-        rs.Unknown1 = reader.ReadInt32();
-        rs.Unknown2 = reader.ReadInt32();
-        rs.DataSize = reader.ReadInt32();
+        rs.Count = headerReader.ReadUInt32();
+        rs.DataOffsetLE = headerReader.ReadBytes(4);
+        rs.Format = headerReader.ReadUInt16();
+        rs.Zero = headerReader.ReadUInt16();
+        rs.DataSizeLE = headerReader.ReadBytes(4);
 
-        for (int i = 0; i < rs.Count; i++) rs.Offsets.Add(reader.ReadInt32());
+        // Pointers are always Little Endian
+        using var pointerReader = new TorusBinaryReader(record.RawData, false);
+        pointerReader.Seek(16, SeekOrigin.Begin);
 
-        // Read Items
+        var offsets = new List<uint>();
         for (int i = 0; i < rs.Count; i++)
         {
-            int itemOffset = rs.Offsets[i];
-            int nextOffset = (i + 1 < rs.Count) ? rs.Offsets[i + 1] : (record.RawData.Length);
-
-            if (itemOffset < 0 || itemOffset >= record.RawData.Length) continue;
-
-            int len = nextOffset - itemOffset;
-            if (len <= 0) len = 64;
-            if (itemOffset + len > record.RawData.Length) len = record.RawData.Length - itemOffset;
-
-            var item = new RenderSpriteItem { Index = i, Offset = itemOffset };
-            item.Data = new byte[len];
-
-            // Read raw bytes for the item data
-            reader.Seek(itemOffset, SeekOrigin.Begin);
-            item.Data = reader.ReadBytes(len);
-
-            // Attempt to parse points from the item buffer
-            // We need a temporary reader for this buffer to handle endianness of floats
-            using var itemReader = new TorusBinaryReader(item.Data, isBigEndian);
-
-            try
-            {
-                // Assuming format: Float X, Float Y...
-                while (itemReader.Position + 8 <= itemReader.Length)
-                {
-                    float x = itemReader.ReadSingle();
-                    float y = itemReader.ReadSingle();
-
-                    if (x > -10000 && x < 10000 && y > -10000 && y < 10000)
-                    {
-                        item.Points.Add(new Avalonia.Point(x, y));
-                    }
-                }
-            }
-            catch { }
-
-            rs.Items.Add(item);
+            if (pointerReader.Position + 4 > pointerReader.Length) break;
+            offsets.Add(pointerReader.ReadUInt32());
         }
 
+        // Block Data follows Platform Endianness (isBigEndian)
+        using var blockReader = new TorusBinaryReader(record.RawData, isBigEndian);
+
+        foreach (var offset in offsets)
+        {
+            if (offset == 0 || offset + 64 > record.RawData.Length) continue;
+
+            blockReader.Seek(offset, SeekOrigin.Begin);
+            var block = new RenderSpriteBlock
+            {
+                PackedInfo1 = blockReader.ReadUInt16(),
+                PackedInfo2 = blockReader.ReadUInt16(),
+                Flags1 = blockReader.ReadUInt16(),
+                Flags2 = blockReader.ReadUInt16(),
+                TypeCode = blockReader.ReadUInt16(),
+                Reserved1 = blockReader.ReadUInt16(),
+                SpeedOrThickness = blockReader.ReadSingle(),
+                UvLeft = blockReader.ReadSingle(),
+                StepValue = blockReader.ReadSingle(),
+                UvTop = blockReader.ReadSingle(),
+                UvRight = blockReader.ReadSingle(),
+                Width = blockReader.ReadSingle(),
+                Height = blockReader.ReadSingle(),
+                ExtraFlags = blockReader.ReadUInt16(),
+                RingType = blockReader.ReadUInt16(),
+                IndexOrAngle = blockReader.ReadSingle(),
+                LookupIndex = blockReader.ReadUInt16(),
+                Reserved2 = blockReader.ReadUInt16(),
+                Reserved3 = blockReader.ReadUInt16(),
+                Reserved4 = blockReader.ReadUInt16(),
+                Reserved5 = blockReader.ReadUInt16(),
+                Reserved6 = blockReader.ReadUInt16(),
+                FutureFloat = blockReader.ReadSingle()
+            };
+            rs.Sprites.Add(new RenderSpriteEntry { Block = block, Index = rs.Sprites.Count });
+        }
         return rs;
     }
 

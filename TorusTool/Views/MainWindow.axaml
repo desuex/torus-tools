@@ -84,7 +84,7 @@
             <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="Gray"/>
             
             <!-- Right Panel -->
-            <Grid Grid.Column="2" RowDefinitions="Auto, Auto, *, *, Auto">
+            <Grid Grid.Column="2" RowDefinitions="Auto, Auto, *, Auto">
                 <!-- DataGrid View (String Table) -->
                 <DataGrid Grid.Row="0" ItemsSource="{Binding CurrentStringTable}" IsVisible="{Binding IsStringTableVisible}"
                           AutoGenerateColumns="True" IsReadOnly="True" GridLinesVisibility="All"
@@ -97,6 +97,8 @@
                           BorderThickness="1" BorderBrush="Gray" Height="150">
                 </DataGrid>
 
+                <!-- Main Content Area (Shared Row 2) -->
+                
                 <!-- DataGrid View (Font Descriptor) -->
                 <Grid Grid.Row="2" RowDefinitions="Auto, *, *" IsVisible="{Binding IsFontDescriptorVisible}">
                     <!-- Header Info -->
@@ -176,11 +178,21 @@
                 </DataGrid>
 
                 <!-- DataGrid View (RenderSprite) -->
-                <Grid Grid.Row="3" ColumnDefinitions="*, *" IsVisible="{Binding IsRenderSpriteVisible}">
+                <Grid Grid.Row="2" ColumnDefinitions="*, *" IsVisible="{Binding IsRenderSpriteVisible}">
                     <DataGrid Grid.Column="0" ItemsSource="{Binding CurrentRenderSpriteItems}" 
                               SelectedItem="{Binding SelectedRenderSpriteItem}"
-                              AutoGenerateColumns="True" IsReadOnly="True" GridLinesVisibility="All"
+                              AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="All"
                               BorderThickness="1" BorderBrush="Gray">
+                        <DataGrid.Columns>
+                              <DataGridTextColumn Header="Idx" Binding="{Binding Index}" MinWidth="40"/>
+                              <DataGridTextColumn Header="Spd/Thk" Binding="{Binding Block.SpeedOrThickness, StringFormat='0.00'}" MinWidth="60"/>
+                              <DataGridTextColumn Header="W" Binding="{Binding Block.Width, StringFormat='0.0'}" MinWidth="50" Width="100"/>
+                              <DataGridTextColumn Header="H" Binding="{Binding Block.Height, StringFormat='0.0'}" MinWidth="50" Width="100"/>
+                              <DataGridTextColumn Header="UV Left" Binding="{Binding Block.UvLeft, StringFormat='0.00'}" MinWidth="60" Width="100"/>
+                              <DataGridTextColumn Header="UV Top" Binding="{Binding Block.UvTop, StringFormat='0.00'}" MinWidth="60" Width="100"/>
+                              <DataGridTextColumn Header="Idx/Ang" Binding="{Binding Block.IndexOrAngle, StringFormat='0.0'}" MinWidth="60"/>
+                              <DataGridTextColumn Header="RingTp" Binding="{Binding Block.RingType}" MinWidth="40"/>
+                        </DataGrid.Columns>
                     </DataGrid>
                     
                     <!-- Sprite Visualizer -->
@@ -206,7 +218,7 @@
                 </Grid>
 
                 <!-- Texture View -->
-                <Grid Grid.Row="3" IsVisible="{Binding IsTextureVisible}">
+                <Grid Grid.Row="2" IsVisible="{Binding IsTextureVisible}">
                      <Grid.RowDefinitions>
                          <RowDefinition Height="Auto"/>
                          <RowDefinition Height="*"/>
@@ -248,7 +260,7 @@
                 </Grid>
 
                 <!-- Hex View -->
-                <ScrollViewer Grid.Row="4">
+                <ScrollViewer Grid.Row="3">
                     <ScrollViewer.IsVisible>
                         <MultiBinding Converter="{x:Static BoolConverters.And}">
                             <Binding Path="!IsStringTableVisible"/>

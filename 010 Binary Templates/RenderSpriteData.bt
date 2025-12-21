@@ -1,0 +1,187 @@
+//------------------------------------------------
+//--- 010 Editor v16.0 Binary Template
+//
+//      File: RenderSpriteData.bt
+//    Author: desuex <hire@dsxm.org>
+//   Version: 0.8
+//   Purpose: Parse RenderSpriteData (RSD) files used
+//            by the TSE engine.
+//            Header + LE pointer table + 64-byte blocks.
+//
+//  Category: Fonts / Game UI
+// File Mask: *RenderSprite*.bin;*RenderSpriteData*
+//  ID Bytes: (none)
+//   History:
+//     0.8   2025-12-21  Refactoring and Translation.
+//     0.7   2025-12-21  word10 -> 2x uint16 (extra0/extra1).
+//     0.6   2025-12-21  Fix sprite block offsets.
+//     0.5   2025-12-21  Header + LE pointers +
+//                       64-byte RSD_SpriteBlock.
+//------------------------------------------------
+
+RequiresVersion( 14 );
+
+//------------------------------------------------
+// Helper: 4 little-endian bytes -> uint32
+//------------------------------------------------
+
+uint32 LE4ToUInt( uchar b[4] )
+{
+    return  (uint32)b[0]        |
+           ((uint32)b[1] <<  8) |
+           ((uint32)b[2] << 16) |
+           ((uint32)b[3] << 24);
+}
+
+//------------------------------------------------
+// Header
+//------------------------------------------------
+//
+// File is opened in BE mode so count/format are read as
+// 0x00000004 / 0x0001 correctly.
+// Pointers and data sizes inside are LE.
+//
+//  00: uint32 count          (BE)  - number of elements
+//  04: uchar  dataOffsetLE[4]      - LE pointer to pointer table
+//  08: uint16 format         (BE)  - format (1, 2, ...)
+//  0A: uint16 zero           (BE)  - usually 0
+//  0C: uchar  dataSizeLE[4]        - LE: size of data starting from dataOffset
+//------------------------------------------------
+
+typedef struct RSD_HeaderRaw
+{
+    uint32 count;           // BE: number of elements
+    uchar  dataOffsetLE[4]; // LE: offset of pointer table (usually 0x10)
+    uint16 format;          // BE: file format / variant
+    uint16 zero;            // BE: reserved, usually 0
+    uchar  dataSizeLE[4];   // LE: size of data region (from dataOffset)
+} RSD_HeaderRaw <style=sHeading1>;
+
+RSD_HeaderRaw hdr;
+
+local uint32 fileSize    = FileSize();
+local uint32 dataOffset  = LE4ToUInt( hdr.dataOffsetLE );  // 0x10 in mini-RSD
+local uint32 dataSize    = LE4ToUInt( hdr.dataSizeLE );    // 0x0120 (288)
+local uint32 dataEnd     = dataOffset + dataSize;
+
+
+//------------------------------------------------
+// Pointer table: count × LE uint32
+//------------------------------------------------
+
+typedef struct RSD_PointerRaw
+{
+    uchar valueLE[4];   // LE pointer bytes
+} RSD_PointerRaw;
+
+local uint32 ptrCount = hdr.count;
+
+// Validate bounds
+if( dataOffset >= fileSize )
+{
+    Warning( "RSD: dataOffset is beyond file size, pointer table skipped." );
+    ptrCount = 0;
+    FSeek( fileSize );
+}
+else
+{
+    // Max count by data size
+    local uint32 maxByData = dataSize / 4;
+    if( maxByData > 0 && ptrCount > maxByData )
+        ptrCount = maxByData;
+
+    // Max count by file boundary
+    local uint32 maxByFile = (fileSize - dataOffset) / 4;
+    if( ptrCount > maxByFile )
+    {
+        ptrCount = maxByFile;
+        Warning( "RSD: pointer table would go beyond file, count clamped." );
+    }
+
+    FSeek( dataOffset );
+}
+
+RSD_PointerRaw objectPtrs[ ptrCount ] <style=sHeading2>;
+
+
+//------------------------------------------------
+// 64-byte Sprite Block (16 words x 4 bytes)
+//------------------------------------------------
+//
+// word0..2   -> 6 x uint16
+//   u0,u1    : packed fields (color/index), varies significantly
+//   u2,u3    : almost always 1, likely flags/enable
+//   u4       : large values 0x3000,0x7000,0xB000,0xF000 (type/variant)
+//   u5       : usually 0
+//
+// word3..9   -> 7 x float
+//   f0       : ~0.0166667 ≈ 1/60 (speed/thickness, shared)
+//   f1..f6   : UV/normalized coords/radii,
+//              values look like 0..1 range and pixel dimensions
+//
+// word10     -> 2 x uint16 (extra0, extra1)
+//   extra0   : usually 0
+//   extra1   : in last sprite = 1 (from dump), possibly "ring" type
+//
+// word11     -> float f8 (often integers 22,27,35,43) – index/angle
+//
+// word12..14 -> 6 x uint16 (u6..uB)
+//   u6       : ~168xx/169xx, same order of magnitude, likely lookup index
+//   u7..uB   : usually 0
+//
+// word15     -> float fTail – currently 0, possibly future/alpha
+//------------------------------------------------
+
+typedef struct RSD_SpriteBlock
+{
+    // word 0..2 (6 x uint16)
+    uint16 packedInfo1; uint16 packedInfo2; // word0 - u0/u1 varies
+    uint16 flags1;      uint16 flags2;      // word1 - u2/u3 almost always 1
+    uint16 typeCode;    uint16 reserved1;   // word2 - u4 large values, u5 0
+
+    // word 3..9 (7 x float)
+    float  speedOrThickness; // word3  - ~1/60, shared speed/thickness
+    float  uvLeft;           // word4  - UV/normalized coord (0..1)
+    float  stepValue;        // word5  - small step (0.0078125 = 1/128)
+    float  uvTop;            // word6  - another UV/radius
+    float  uvRight;          // word7  - another UV/radius
+    float  width;            // word8  - appears to be width in pixels (86,54,70,44)
+    float  height;           // word9  - appears to be height in pixels (86,59,70,48)
+
+    // word 10 (2 x uint16 instead of float)
+    uint16 extraFlags;       // word10 low  - usually 0
+    uint16 ringType;         // word10 high - can be 1 (ring type/flag?)
+
+    // word 11 (float)
+    float  indexOrAngle;     // word11 - small integers (22,27,35,43)
+
+    // word 12..14 (6 x uint16)
+    uint16 lookupIndex; uint16 reserved2;   // word12 - u6 ≈ 168xx/169xx
+    uint16 reserved3;   uint16 reserved4;   // word13 - usually 0
+    uint16 reserved5;   uint16 reserved6;   // word14 - usually 0
+
+    // word 15 (float)
+    float  futureFloat;      // word15 - currently 0
+} RSD_SpriteBlock <style=sSection1>;
+
+// Simple wrapper to access sprites[i].block in Results
+typedef struct RSD_SpriteEntry
+{
+    RSD_SpriteBlock block;
+} RSD_SpriteEntry <style=sSection1Accent>;
+
+
+local int    i;
+local uint32 ptr_sprite_block_addr;
+
+for( i = 0; i < ptrCount; ++i )
+{
+    ptr_sprite_block_addr = LE4ToUInt( objectPtrs[i].valueLE );
+
+    if( ptr_sprite_block_addr == 0 ||
+        ptr_sprite_block_addr + sizeof(RSD_SpriteEntry) > fileSize )
+        continue; // skip null/invalid pointer
+
+    FSeek( ptr_sprite_block_addr );
+    RSD_SpriteEntry sprites;
+}
