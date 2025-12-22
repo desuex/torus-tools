@@ -121,14 +121,32 @@ public partial class MainWindowViewModel : ViewModelBase
 
             // User feedback: UvTop (f3) caused diagonal movement (implying it's likely Right/U2).
             // Trying StepValue (f2/Word5) as Y (Top).
-            double x = b.UvLeft * w;
-            double y = b.StepValue * h;
+            // Mapping based on BT: F1=U1, F2=V1, F3=U2, F4=V2
+            double u1 = b.UvLeft;
+            double v1 = b.StepValue;
+            double u2 = b.UvTop;
+            double v2 = b.UvRight;
+
+            double x = u1 * w;
+            double y = v1 * h;
+            double width = (u2 - u1) * w;
+            double height = (v2 - v1) * h;
+
+            // Handle swaps
+            if (width < 0) { x += width; width = -width; }
+            if (height < 0) { y += height; height = -height; }
+
+            SelectedSpriteRect = new Avalonia.Rect(x, y, width, height);
+
+            // Replaced lines:
+            // double x = b.UvLeft * w;
+            // double y = b.StepValue * h;
 
             // Width/Height in parsed block seem to be pixel values based on BT (word8/9)
             // But let's verify if UVs match.
             // If they are pixels, we just use them.
 
-            SelectedSpriteRect = new Avalonia.Rect(x, y, b.Width, b.Height);
+
         }
         else
         {
