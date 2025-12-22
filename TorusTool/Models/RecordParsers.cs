@@ -265,8 +265,12 @@ public static class RecordParsers
         using var pointerReader = new TorusBinaryReader(record.RawData, false);
         pointerReader.Seek(16, SeekOrigin.Begin);
 
+        uint dataSize = BitConverter.ToUInt32(rs.DataSizeLE);
+        uint maxCount = dataSize / 4;
+        uint countToRead = Math.Min(rs.Count, maxCount);
+
         var offsets = new List<uint>();
-        for (int i = 0; i < rs.Count; i++)
+        for (int i = 0; i < countToRead; i++)
         {
             if (pointerReader.Position + 4 > pointerReader.Length) break;
             offsets.Add(pointerReader.ReadUInt32());

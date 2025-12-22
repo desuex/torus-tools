@@ -119,9 +119,10 @@ public partial class MainWindowViewModel : ViewModelBase
             var h = CurrentRenderSpriteTexture.Size.Height;
             var b = SelectedRenderSpriteItem.Block;
 
-            // Assume UVs are 0..1
+            // User feedback: UvTop (f3) caused diagonal movement (implying it's likely Right/U2).
+            // Trying StepValue (f2/Word5) as Y (Top).
             double x = b.UvLeft * w;
-            double y = b.UvTop * h;
+            double y = b.StepValue * h;
 
             // Width/Height in parsed block seem to be pixel values based on BT (word8/9)
             // But let's verify if UVs match.
