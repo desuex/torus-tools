@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
@@ -76,14 +77,66 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsRenderSpriteVisible))]
     private ObservableCollection<RenderSpriteEntry> _currentRenderSpriteItems = new();
 
+    public List<Avalonia.Media.Imaging.Bitmap> RenderSpriteTextures { get; } = new();
+
+    [ObservableProperty]
+    private Avalonia.Media.Imaging.Bitmap? _currentRenderSpriteTexture;
+
     public ObservableCollection<DataTableItem> CurrentDataTableItems { get; } = new();
 
     [ObservableProperty]
     private RenderSpriteEntry? _selectedRenderSpriteItem;
 
+    partial void OnSelectedRenderSpriteItemChanged(RenderSpriteEntry? value)
+    {
+        if (value == null || RenderSpriteTextures.Count == 0) return;
+
+        // User spec: Texture number is most likely the extraFlags param
+        int texIndex = value.Block.ExtraFlags;
+
+        // Safety check
+        if (texIndex >= 0 && texIndex < RenderSpriteTextures.Count)
+        {
+            CurrentRenderSpriteTexture = RenderSpriteTextures[texIndex];
+        }
+        else if (RenderSpriteTextures.Count > 0)
+        {
+            // Fallback to 0 if out of bounds? Or keep current?
+            CurrentRenderSpriteTexture = RenderSpriteTextures[0];
+        }
+
+        UpdateSpriteRect();
+    }
 
     [ObservableProperty]
-    private bool _showFontOverlay = true;
+    private Avalonia.Rect _selectedSpriteRect;
+
+    private void UpdateSpriteRect()
+    {
+        if (CurrentRenderSpriteTexture != null && SelectedRenderSpriteItem != null)
+        {
+            var w = CurrentRenderSpriteTexture.Size.Width;
+            var h = CurrentRenderSpriteTexture.Size.Height;
+            var b = SelectedRenderSpriteItem.Block;
+
+            // Assume UVs are 0..1
+            double x = b.UvLeft * w;
+            double y = b.UvTop * h;
+
+            // Width/Height in parsed block seem to be pixel values based on BT (word8/9)
+            // But let's verify if UVs match.
+            // If they are pixels, we just use them.
+
+            SelectedSpriteRect = new Avalonia.Rect(x, y, b.Width, b.Height);
+        }
+        else
+        {
+            SelectedSpriteRect = new Avalonia.Rect(0, 0, 0, 0);
+        }
+    }
+
+
+
 
     private readonly GameConfigService _configService = new();
 
@@ -205,6 +258,8 @@ public partial class MainWindowViewModel : ViewModelBase
         CurrentHunkHeader.Clear();
         CurrentFontItems.Clear();
         CurrentRenderSpriteItems.Clear();
+        RenderSpriteTextures.Clear();
+        CurrentRenderSpriteTexture = null;
         CurrentDataTableItems.Clear();
         CurrentTextureImage = null;
         if (value == null) return;
@@ -427,6 +482,96 @@ public partial class MainWindowViewModel : ViewModelBase
                 {
                     CurrentRenderSpriteItems.Add(item);
                 }
+
+                // Attempt to load associated textures
+                // Format seems to indicate count, e.g. 2
+                // Textures are usually named {NodeName}0, {NodeName}1...
+                // Or if Format == 1, maybe just {NodeName}?
+
+                // Let's try finding pattern "Name0", "Name1" first.
+                string baseName = value.Name;
+                // Remove extension if present (though View nodes usually differ)
+
+                // Helper to find and decode texture
+                Avalonia.Media.Imaging.Bitmap? LoadTexture(string name)
+                {
+                    // Search RootNodes (flattened search or just top level?)
+                    // The tree might be huge. Let's assume they are siblings or close?
+                    // Usually in the same file/pack. 
+                    // If we are in a pack, we should search siblings in the pack.
+
+                    HunkRecord? targetTexHeader = null;
+                    HunkRecord? targetTexData = null;
+
+                    // Search strategy: 
+                    // 1. Siblings in same folder/node list
+                    // 2. Scan RootNodes recursively (expensive?)
+
+                    // Actually, if we are in a Packfile node, siblings are in value.Parent? 
+                    // But HunkFileTreeNode structure isn't doubly linked in this ViewModel def?
+                    // We have RootNodes.
+
+                    var targetNode = FindNodeByName(RootNodes, name);
+                    if (targetNode != null)
+                    {
+                        targetTexHeader = targetNode.Records.FirstOrDefault(r => r.Type == HunkRecordType.TSETextureHeader);
+                        targetTexData = targetNode.Records.FirstOrDefault(r => r.Type == HunkRecordType.TSETextureData || r.Type == HunkRecordType.TSETextureData2 || r.Type == HunkRecordType.TSETextureDataWii || r.Type == HunkRecordType.TSETextureDataPS3);
+                    }
+
+                    if (targetTexHeader != null && targetTexData != null)
+                    {
+                        var header = RecordParsers.ParseTextureHeader(targetTexHeader, IsBigEndian);
+                        if (header != null)
+                        {
+                            try
+                            {
+                                return DecodeTexture(header, targetTexData.RawData, targetTexData.Type);
+                            }
+                            catch { }
+                        }
+                    }
+                    return null;
+                }
+
+                // Try Name0, Name1... based on Format
+                // If Format is 0, assume 1?
+                int count = rs.Format == 0 ? 1 : rs.Format;
+
+                // Heuristic: Check if Name0 exists. if so, assume numbered.
+                // If not, try Name.
+
+                bool foundAny = false;
+
+                // Try indexed
+                for (int i = 0; i < count; i++)
+                {
+                    var tex = LoadTexture(baseName + i);
+                    if (tex != null)
+                    {
+                        RenderSpriteTextures.Add(tex);
+                        foundAny = true;
+                    }
+                    else
+                    {
+                        // If we failed at 0, maybe it's not indexed?
+                        if (i == 0) break;
+                    }
+                }
+
+                if (!foundAny)
+                {
+                    // Try exact name
+                    var tex = LoadTexture(baseName);
+                    if (tex != null)
+                    {
+                        RenderSpriteTextures.Add(tex);
+                    }
+                }
+
+                if (RenderSpriteTextures.Count > 0)
+                {
+                    CurrentRenderSpriteTexture = RenderSpriteTextures[0];
+                }
             }
         }
         // Check for Texture
@@ -452,75 +597,6 @@ public partial class MainWindowViewModel : ViewModelBase
                     TextureInfo += $" | Decode Error: {ex.Message}";
                 }
 
-                // Debug Font Items
-                if (CurrentFontItems.Count > 0)
-                {
-                    var f = CurrentFontItems[0];
-                    var nonEmpty = CurrentFontItems.Where(x => x.Width > 0).Take(5).ToList();
-
-                    TextureInfo += $" | Glyphs: {CurrentFontItems.Count}";
-
-                    if (fd != null)
-                    {
-                        TextureInfo += $" | Hdr: V={fd.PlatformHeader.BBoxMinY}, Z={fd.PlatformHeader.VersionOrFlags}, Q1={fd.PlatformHeader.LineHeight}, Q3={fd.PlatformHeader.Ascender}";
-                    }
-
-                    var dpadCandidates = CurrentFontItems.Where(x => Math.Abs(x.Width) >= 98 && Math.Abs(x.Width) <= 108).ToList();
-                    var lstickCandidates = CurrentFontItems.Where(x => Math.Abs(x.Width) >= 80 && Math.Abs(x.Width) <= 90).ToList();
-
-                    if (dpadCandidates.Any())
-                    {
-                        var c = dpadCandidates.First();
-                        TextureInfo += $" | Found D-Pad? (Idx={c.Index}): ID={c.CharDisplay}, W={c.Width}, Hex={c.RowData}";
-                    }
-
-                    if (lstickCandidates.Any())
-                    {
-                        var c = lstickCandidates.First();
-                        TextureInfo += $" | Found L-Stick? (Idx={c.Index}): ID={c.CharDisplay}, W={c.Width}, Hex={c.RowData}";
-                    }
-
-                    var zeroByte2 = CurrentFontItems.FirstOrDefault(item =>
-                    {
-                        return item.X == 0;
-                    });
-
-                    if (zeroByte2 != null)
-                    {
-                        TextureInfo += $" | RAW ZERO: ID={zeroByte2.CharDisplay}, W={zeroByte2.Width}, Hex={zeroByte2.RowData}";
-                    }
-                    else
-                    {
-                        TextureInfo += " | No X=0 found.";
-                    }
-
-                    var idC5 = CurrentFontItems.FirstOrDefault(x => x.CharId == 0xC5);
-                    if (idC5 != null)
-                    {
-                        TextureInfo += $" | TARGET C5: ID={idC5.CharDisplay}, W={idC5.Width}, Hex={idC5.RowData} | X_Calc={idC5.X}";
-                    }
-
-                    var idCC = CurrentFontItems.FirstOrDefault(x => x.CharId == 0xCC);
-                    if (idCC != null)
-                    {
-                        TextureInfo += $" | TARGET CC: ID={idCC.CharDisplay}, W={idCC.Width}, Hex={idCC.RowData} | X_Calc={idCC.X}";
-                    }
-
-                    if (nonEmpty.Any())
-                    {
-                        var first = nonEmpty[0];
-                        TextureInfo += $" | FirstValid: X={first.X}, Y={first.Y}, W={first.Width}";
-                        TextureInfo += $" | Hex: {string.Join(" | ", nonEmpty.Select(x => x.RowData))}";
-                    }
-                    else
-                    {
-                        TextureInfo += " | No valid glyphs found.";
-                    }
-                }
-                else
-                {
-                    TextureInfo += " | No Glyphs";
-                }
             }
         }
         else
@@ -913,6 +989,20 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         var window = new TorusTool.Views.Tools3DSWindow();
         window.ShowDialog(owner);
+    }
+
+    private HunkFileTreeNode? FindNodeByName(ObservableCollection<HunkFileTreeNode> nodes, string name)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) return node;
+            if (node.Children.Any())
+            {
+                var child = FindNodeByName(node.Children, name);
+                if (child != null) return child;
+            }
+        }
+        return null;
     }
 }
 

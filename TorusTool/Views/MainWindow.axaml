@@ -197,23 +197,18 @@
                     
                     <!-- Sprite Visualizer -->
                     <Border Grid.Column="1" BorderBrush="Gray" BorderThickness="1" Background="#202020" Margin="5">
-                        <ItemsControl ItemsSource="{Binding SelectedRenderSpriteItem.Points}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <Canvas Width="500" Height="500" Background="Black">
-                                        <Canvas.RenderTransform>
-                                             <ScaleTransform ScaleX="5" ScaleY="5"/>
-                                        </Canvas.RenderTransform>
-                                    </Canvas>
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Ellipse Width="2" Height="2" Fill="Cyan"
-                                             Canvas.Left="{Binding X}" Canvas.Top="{Binding Y}"/>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                             <Grid>
+                                 <Image Source="{Binding CurrentRenderSpriteTexture}" Stretch="None"/>
+                                 <Canvas Width="{Binding CurrentRenderSpriteTexture.Size.Width}" Height="{Binding CurrentRenderSpriteTexture.Size.Height}" IsHitTestVisible="False">
+                                     <Rectangle Canvas.Left="{Binding SelectedSpriteRect.X}"
+                                                Canvas.Top="{Binding SelectedSpriteRect.Y}"
+                                                Width="{Binding SelectedSpriteRect.Width}"
+                                                Height="{Binding SelectedSpriteRect.Height}"
+                                                Stroke="Cyan" StrokeThickness="2" Fill="#4000FFFF"/>
+                                 </Canvas>
+                             </Grid>
+                        </ScrollViewer>
                     </Border>
                 </Grid>
 
@@ -225,36 +220,12 @@
                      </Grid.RowDefinitions>
                      <StackPanel Orientation="Horizontal" Spacing="10">
                          <TextBox Text="{Binding TextureInfo}" FontWeight="Bold" Margin="5" IsReadOnly="True" Width="800" TextWrapping="Wrap"/>
-                         <CheckBox Content="Show Font Overlay" IsChecked="{Binding ShowFontOverlay}" Margin="5"/>
                          <CheckBox Content="Big Endian" IsChecked="{Binding IsBigEndian}" Margin="5"/>
                      </StackPanel>
                      
                      <Border Grid.Row="1" BorderBrush="Gray" BorderThickness="1" Background="#202020" Margin="5">
                          <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                             <Grid>
-                                 <Image Source="{Binding CurrentTextureImage}" Stretch="None"/>
-                                 
-                                 <!-- Font Overlay -->
-                                 <ItemsControl ItemsSource="{Binding CurrentFontItems}" IsVisible="{Binding ShowFontOverlay}">
-                                     <ItemsControl.ItemsPanel>
-                                         <ItemsPanelTemplate>
-                                             <Canvas Width="{Binding CurrentTextureImage.Size.Width}" Height="{Binding CurrentTextureImage.Size.Height}"/>
-                                         </ItemsPanelTemplate>
-                                     </ItemsControl.ItemsPanel>
-                                     <ItemsControl.ItemTemplate>
-                                         <DataTemplate>
-                                             <Rectangle Canvas.Left="{Binding X}" Canvas.Top="{Binding Y}"
-                                                        Width="{Binding Width}" Height="{Binding Height}"
-                                                        Stroke="Magenta" StrokeThickness="2" Fill="#20FF00FF"
-                                                        IsVisible="{Binding IsVisibleInAtlas}">
-                                                 <ToolTip.Tip>
-                                                     <TextBlock Text="{Binding CharDisplay}"/>
-                                                 </ToolTip.Tip>
-                                             </Rectangle>
-                                         </DataTemplate>
-                                     </ItemsControl.ItemTemplate>
-                                 </ItemsControl>
-                             </Grid>
+                             <Image Source="{Binding CurrentTextureImage}" Stretch="None"/>
                          </ScrollViewer>
                      </Border>
                 </Grid>
