@@ -11,7 +11,7 @@ using TorusTool.IO;
 
 namespace TorusTool.ViewModels;
 
-public partial class Tools3DSViewModel : ViewModelBase
+public partial class PackfileToolsViewModel : ViewModelBase
 {
     private readonly GameConfigService _configService = new();
 
@@ -38,7 +38,7 @@ public partial class Tools3DSViewModel : ViewModelBase
     [ObservableProperty]
     private GameConfig _selectedGame;
 
-    public Tools3DSViewModel()
+    public PackfileToolsViewModel()
     {
         foreach (var game in _configService.AvailableGames)
         {

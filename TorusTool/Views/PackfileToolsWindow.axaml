@@ -4,12 +4,12 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="500"
-        x:Class="TorusTool.Views.Tools3DSWindow"
-        x:DataType="vm:Tools3DSViewModel"
-        Title="3DS Tools" Width="600" Height="500" WindowStartupLocation="CenterOwner" CanResize="False">
+        x:Class="TorusTool.Views.PackfileToolsWindow"
+        x:DataType="vm:PackfileToolsViewModel"
+        Title="Packfile Tools" Width="600" Height="500" WindowStartupLocation="CenterOwner" CanResize="False">
 
     <Design.DataContext>
-        <vm:Tools3DSViewModel/>
+        <vm:PackfileToolsViewModel/>
     </Design.DataContext>
 
     <DockPanel Margin="20">

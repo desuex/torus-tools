@@ -1004,9 +1004,9 @@ public partial class MainWindowViewModel : ViewModelBase
         return sb.ToString();
     }
     [RelayCommand]
-    public void OpenTools3DS(Avalonia.Controls.Window owner)
+    public void OpenPackfileTools(Avalonia.Controls.Window owner)
     {
-        var window = new TorusTool.Views.Tools3DSWindow();
+        var window = new TorusTool.Views.PackfileToolsWindow();
         window.ShowDialog(owner);
     }
 

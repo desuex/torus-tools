@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Text;
 using TorusTool.Models;
 
@@ -9,200 +11,254 @@ namespace TorusTool.IO;
 public class PackfileReader
 {
     private const uint MAGIC_PAK = 0x004B4150; // "PAK\0"
-    
+
     public static Packfile Read(string path)
     {
         var packfile = new Packfile();
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        // 3DS is Little Endian
         using var reader = new TorusBinaryReader(fs, isBigEndian: false);
 
+        // 1. HEADER
         uint magic = reader.ReadUInt32();
         if (magic != MAGIC_PAK)
         {
-            throw new InvalidDataException($"Invalid magic: {magic:X8}, expected PAK\\0");
+             throw new InvalidDataException($"Invalid magic: {magic:X8}, expected PAK\\0");
         }
 
-        uint fileCount = reader.ReadUInt32();
+        uint headerSize = reader.ReadUInt32();
+        uint folderCount = reader.ReadUInt32();
         
-        for (int i = 0; i < fileCount; i++)
-        {
-            var entry = new PackfileEntry();
-            entry.NameCrc = reader.ReadUInt32();
-            entry.Offset = reader.ReadUInt32();
-            entry.Size = reader.ReadUInt32();
+        // 2. DIRECTORY TABLE
+        reader.Seek(12, SeekOrigin.Begin);
+        var directories = new List<(string Name, uint FirstFilePtr)>();
 
-            // We can peek at the data to determine extension, but verifying every file might be slow?
-            // The BMS script does 'goto offset', checks !ZLS, decompresses, checks subtype.
-            // For a 'Viewer' we probably want to determine extension lazily or now?
-            // Let's do it now for the list to look nice, assuming the packfile isn't massive.
+        for (int i = 0; i < folderCount; i++)
+        {
+            long dirStart = reader.Position;
+            uint id = reader.ReadUInt32();
+            uint firstFilePtr = reader.ReadUInt32();
+            string dirName = ReadNullTerminatedString(reader);
+            directories.Add((dirName, firstFilePtr));
             
-            long returnPos = reader.Position;
-            try
+            // Align
+            long currentPos = reader.Position;
+            long alignedPos = (currentPos + 3) & ~3;
+            if (alignedPos != currentPos) reader.Seek(alignedPos, SeekOrigin.Begin);
+        }
+
+        // 3. SCAN FILES (Phase 1)
+        // Collect metadata to find Pointer Table bounds
+        var unprocessedEntries = new List<UnprocessedEntry>();
+        var processedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        
+        uint minPtrAddr = uint.MaxValue;
+        uint maxPtrAddr = 0;
+
+        foreach (var dir in directories)
+        {
+            uint nextFilePtr = dir.FirstFilePtr;
+            while (nextFilePtr != 0)
             {
-                reader.Seek(entry.Offset, SeekOrigin.Begin);
-                string sign = reader.ReadStringFixed(4);
-                if (sign == "!ZLS")
+                 // Safety break for loops
+                 if (nextFilePtr >= headerSize && headerSize > 0) 
+                 {
+                     // If pointer is outside header, it's suspicious, but maybe valid? 
+                     // HeaderSize is total size of header section.
+                     // File entries should be within header.
+                 }
+
+                 reader.Seek(nextFilePtr, SeekOrigin.Begin);
+                 
+                 uint nextPtrVal = reader.ReadUInt32();
+                 uint totalOriginalSize = reader.ReadUInt32();
+                 uint blockCount = reader.ReadUInt32();
+                 uint pointerTableAddr = reader.ReadUInt32(); // Absolute Address of the pointer
+                 
+                 string fileName = ReadNullTerminatedString(reader);
+                 string fullPath = $"{dir.Name}/{fileName}".Replace('\\', '/');
+
+                 if (!processedPaths.Contains(fullPath))
+                 {
+                     processedPaths.Add(fullPath);
+                     unprocessedEntries.Add(new UnprocessedEntry 
+                     { 
+                        FullPath = fullPath, 
+                        Name = fileName,
+                        PointerTableAddr = pointerTableAddr,
+                        BlockCount = blockCount,
+                        TotalOriginalSize = totalOriginalSize
+                     });
+
+                     if (pointerTableAddr < minPtrAddr) minPtrAddr = pointerTableAddr;
+                     // The last pointer used by this file is at Addr + (BlockCount-1)*4
+                     // We need the table to cover up to that.
+                     // Also we need the NEXT entry for size calc, so effectively + BlockCount*4
+                     uint endAddr = pointerTableAddr + (blockCount * 4); 
+                     if (endAddr > maxPtrAddr) maxPtrAddr = endAddr;
+                 }
+                 
+                 // Cycle check?
+                 if (nextPtrVal == nextFilePtr) break;
+                 
+                 nextFilePtr = nextPtrVal;
+            }
+        }
+        
+        if (unprocessedEntries.Count == 0) return packfile;
+
+        // 4. READ POINTER TABLE
+        // Read from minPtrAddr to maxPtrAddr + some margin?
+        // We usually need the "next" pointer for size calculation.
+        // So read one extra uint if possible.
+        
+        long tableStart = minPtrAddr;
+        long tableEnd = maxPtrAddr + 4; // Read one extra for the last file's size boundary
+        
+        // Safety clamp
+        if (tableEnd > fs.Length) tableEnd = fs.Length;
+        if (tableStart >= tableEnd) 
+        {
+            // Weird?
+            return packfile;
+        }
+        
+        int tableSize = (int)(tableEnd - tableStart);
+        reader.Seek(tableStart, SeekOrigin.Begin);
+        
+        // Read as array
+        // Index 0 corresponds to tableStart
+        int entryCount = tableSize / 4;
+        uint[] pointerTable = new uint[entryCount];
+        for (int i = 0; i < entryCount; i++)
+        {
+            pointerTable[i] = reader.ReadUInt32();
+        }
+
+        // 5. RESOLVE FILES
+        foreach (var u in unprocessedEntries)
+        {
+            // Calculate index relative to our read table
+            long relativeOffset = u.PointerTableAddr - tableStart;
+            if (relativeOffset < 0 || relativeOffset % 4 != 0) continue; // Should not happen
+            
+            int index = (int)(relativeOffset / 4);
+            
+            if (index < pointerTable.Length)
+            {
+                uint dataOffset = pointerTable[index];
+                
+                // Determine size
+                // Logic: Size = NextOffset - CurrentOffset
+                // NextOffset is usually table[index+1].
+                
+                uint nextOffset = 0;
+                // Use the pointer after the LAST block of this file
+                int nextIndex = index + (int)u.BlockCount;
+                
+                if (nextIndex < pointerTable.Length)
                 {
-                    // It's compressed
-                    // Peek decompression
-                    // !ZLS (4) + Size (4) + ZLibStream
-                    // !ZLS (4) + Size (4) + ZLibStream
-                    
-                    // We need at least 8 bytes for simple check (maxa or hnk header are at 0x0)
-                    // If we just need first 8 bytes of uncompressed, we can try to decompress a tiny chunk?
-                    // ZLib stream might complain if truncated.
-                    // But we can try to read a small buffer.
-                    
-                    // Actually, for massive packfiles, doing this for ALL entries might be slow.
-                    // But for 3DS games (~2000 files?), it might take a few seconds.
-                    // Let's implement a quick helper to get first N bytes of uncompressed.
-                    
-                    byte[] zlsHeader = reader.ReadBytes(4); // Uncompressed size
-                    // We just continue reading generic blob
-                    // Reversing seek to get the stream start
-                    reader.Seek(-4, SeekOrigin.Current); 
-                    
-                    // Read a small chunk of compressed data to feed ZLib
-                    int compressedPeekSize = (int)Math.Min(entry.Size - 8, 512); 
-                    byte[] compressedChunk = reader.ReadBytes(compressedPeekSize);
-                    
-                    string detectedExt = "zdat";
-                    
-                    try 
-                    {
-                        using var msIn = new MemoryStream(compressedChunk);
-                        using var msOut = new MemoryStream();
-                        using (var zlib = new ZLibStream(msIn, CompressionMode.Decompress, leaveOpen: true))
-                        {
-                            byte[] buffer = new byte[16];
-                            // Try to read enough bytes
-                            // Note: ZLibStream might fail on incomplete stream even for read?
-                            // QuickBMS 'clog' handles it. .NET ZLibStream might throw 'Block length does not match..' or similar if stream ends abruptly.
-                            // But usually Read() works until it needs more input.
-                            // However, we only have a chunk.
-                            // Let's hope Deflate allows partial input processing for the start of stream.
-                            // If this fails often, we might skip it or use a tolerant decompression.
-                            // ALTERNATIVELY: Just accept 'zdat' until unpacked.
-                            // BUT User asked for detection.
-                            
-                            // Let's rely on standard read. If it throws, fallback to zdat.
-                            try {
-                                int read = zlib.Read(buffer, 0, buffer.Length);
-                                if (read >= 4)
-                                {
-                                    if (buffer[0] == 'm' && buffer[1] == 'a' && buffer[2] == 'x' && buffer[3] == 'a')
-                                    {
-                                        detectedExt = "files";
-                                    }
-                                    else 
-                                    {
-                                        // Check for HNK: 0x40070 (LE: 70 00 04 00)
-                                        // or 00 00 00 01 (Version?) logic
-                                        // The BMS script checks SUBTYPE at 0x4 (bytes 4-7)
-                                        if (read >= 8)
-                                        {
-                                            uint subtype = BitConverter.ToUInt32(buffer, 4); 
-                                            // BMS: if SUBTYPE == 0x00040070 -> hnk
-                                            if (subtype == 0x00040070) detectedExt = "hnk";
-                                        }
-                                    }
-                                }
-                            }
-                            catch { /* Chunk might be too small or ZLib strict */ }
-                        }
-                    }
-                    catch { }
-                    
-                    entry.SuggestedExtension = detectedExt;
+                    nextOffset = pointerTable[nextIndex];
                 }
                 else
                 {
-                     // Uncompressed check
-                     if (sign.StartsWith("maxa")) entry.SuggestedExtension = "files";
-                     else 
+                    // End of Heap
+                    nextOffset = (uint)fs.Length;
+                }
+                
+                // If nextOffset is 0, it might be end of file or invalid. 
+                // Scan forward for non-zero? Or assume EOF?
+                if (nextOffset == 0) nextOffset = (uint)fs.Length; 
+                
+                if (dataOffset != 0 && nextOffset >= dataOffset)
+                {
+                    uint size = nextOffset - dataOffset;
+                    
+                    // Sanity check
+                    if (size > 200 * 1024 * 1024) 
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Warning] Huge size {size} for {u.FullPath}. Skipping.");
+                        continue;
+                    }
+
+                    var entry = new PackfileEntry
+                    {
+                        FullPath = u.FullPath,
+                        Offset = dataOffset,
+                        Size = size,
+                        OriginalSize = u.TotalOriginalSize,
+                        PointerIndex = index, // Relative index? Or absolute? Not used much.
+                        SuggestedExtension = Path.GetExtension(u.Name).TrimStart('.'),
+                        IsCompressed = false
+                    };
+
+                    // Peek !CMP
+                     try 
                      {
-                         // Check bytes 4-7 for hnk subtype
-                         // We are at offset+4
-                         byte[] extra = reader.ReadBytes(4);
-                         if (extra.Length == 4)
-                         {
-                             uint subtype = BitConverter.ToUInt32(extra, 0);
-                             if (subtype == 0x00040070) entry.SuggestedExtension = "hnk";
-                             else entry.SuggestedExtension = "dat";
-                         }
-                         else entry.SuggestedExtension = "dat";
-                     }
+                        if (dataOffset + 4 <= fs.Length)
+                        {
+                            reader.Seek(dataOffset, SeekOrigin.Begin);
+                            byte[] magicCheck = reader.ReadBytes(4);
+                            if (magicCheck.Length == 4 && Encoding.ASCII.GetString(magicCheck) == "!CMP")
+                            {
+                                entry.IsCompressed = true;
+                            }
+                        }
+                     } catch {}
+
+                    packfile.Entries.Add(entry);
                 }
             }
-            catch
-            {
-                // potential read error
-            }
-            finally
-            {
-                reader.Seek(returnPos, SeekOrigin.Begin);
-            }
-            
-            packfile.Entries.Add(entry);
         }
 
         return packfile;
     }
+
+    private class UnprocessedEntry
+    {
+        public string FullPath;
+        public string Name;
+        public uint PointerTableAddr;
+        public uint BlockCount;
+        public uint TotalOriginalSize;
+    }
     
+    // ... Helper methods ...
+    private static string ReadNullTerminatedString(TorusBinaryReader reader)
+    {
+        var sb = new StringBuilder();
+        char c;
+        while ((c = (char)reader.ReadByte()) != '\0')
+        {
+            sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
     public static byte[] ExtractFile(string packPath, PackfileEntry entry)
     {
+        // ... (Same as before) ...
         using var fs = new FileStream(packPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        using var reader = new TorusBinaryReader(fs, isBigEndian: false);
-        
-        reader.Seek(entry.Offset, SeekOrigin.Begin);
-        byte[] rawData = reader.ReadBytes((int)entry.Size); // Safe-ish cast for 3DS file sizes
+        using var reader = new BinaryReader(fs);
 
-        if (rawData.Length > 4 && Encoding.ASCII.GetString(rawData, 0, 4) == "!ZLS")
+        reader.BaseStream.Seek(entry.Offset, SeekOrigin.Begin);
+        byte[] rawData = reader.ReadBytes((int)entry.Size);
+
+        if (rawData.Length > 4 && Encoding.ASCII.GetString(rawData, 0, 4) == "!CMP")
         {
-            // Decompress
-            // !ZLS (4 bytes)
-            // Uncompressed Size (4 bytes)
-            // Data...
-            
-            int uncompressedSize = BitConverter.ToInt32(rawData, 4);
-            // 3DS is LE, BitConverter uses system endianness (usually LE on Windows), so this is fine. 
-            // If running on BE system this would be wrong, but TorusTool runs on PC (LE).
-            
-            // DeflateStream expects just the deflate data.
-            // ZLIB usually has header 0x78 0x9C (default) or other.
-            // PROBABLE: It is ZLIB wrapped. DeflateStream might fail if it has headers?
-            // .NET DeflateStream is raw deflate (RFC 1951). 
-            // .NET ZLibStream (NET 6) handles ZLib (RFC 1950).
-            
-            // Assume 8 byte header (!ZLS + size) is skipped.
-            // The BMS command `clog MEMORY_FILE OFFSET SIZE XSIZE` in QuickBMS defaults to ZLIB usually unless specified otherwise?
-            // "If the compression is not specified... ZLIB is used."
-            
-            using var msInput = new MemoryStream(rawData, 8, rawData.Length - 8);
-            using var msOutput = new MemoryStream(uncompressedSize);
-            
-            // Attempt ZLibStream first
-            try 
-            {
+             int uncompressedSize = BitConverter.ToInt32(rawData, 4);
+             try 
+             {
+                 using var msInput = new MemoryStream(rawData, 8, rawData.Length - 8);
+                 using var msOutput = new MemoryStream(uncompressedSize);
                  using var zlib = new ZLibStream(msInput, CompressionMode.Decompress);
                  zlib.CopyTo(msOutput);
-            }
-            catch
-            {
-                // Fallback or error?
-                /* 
-                   If ZLibStream fails, it might be raw Deflate.
-                   msInput.Position = 0;
-                   using var deflate = new DeflateStream(msInput, CompressionMode.Decompress);
-                   deflate.CopyTo(msOutput);
-                */
-                throw;
-            }
-            
-            return msOutput.ToArray();
+                 return msOutput.ToArray();
+             }
+             catch
+             {
+                 return rawData;
+             }
         }
-        
         return rawData;
     }
 }

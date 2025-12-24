@@ -38,7 +38,7 @@
                  <MenuItem Header="Ex_port HNK..." Command="{Binding ExportHnkCommand}" CommandParameter="{Binding $parent[Window].StorageProvider}"/>
                  <MenuItem Header="Im_port HNK..." Command="{Binding ImportHnkCommand}" CommandParameter="{Binding $parent[Window].StorageProvider}"/>
                  <Separator/>
-                 <MenuItem Header="3DS Tools..." Command="{Binding OpenTools3DSCommand}" CommandParameter="{Binding $parent[Window]}"/>
+                 <MenuItem Header="Packfile Tools..." Command="{Binding OpenPackfileToolsCommand}" CommandParameter="{Binding $parent[Window]}"/>
              </MenuItem>
         </Menu>
         

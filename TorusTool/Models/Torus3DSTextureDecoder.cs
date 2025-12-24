@@ -16,17 +16,8 @@ namespace TorusTool.Models
 
             if (format.Contains("L8")) // 3DS_L8
             {
-                // Is this actually L8? If user said it failed, maybe we repurpose this ID 
-                // effectively, but let's keep L8 method for legacy and add ETC1.
-                // But the caller passes "3DS_L8" because we hardcoded it in RecordParsers.
-                // We should assume "3DS_L8" might actually be "3DS_ETC1A4" if size matches?
-                // Or I'll update RecordParsers to say "3DS_ETC1A4" later.
-                // For now, let's force ETC1A4 logic if length matches dimensions * 1
-                
                  if (data.Length == width * height)
                  {
-                     // Could be L8 or ETC1A4 (both 1bpp avg)
-                     // Given L8 looked like noise, let's try ETC1A4.
                      DecodeETC1A4(width, height, data, pixelData);
                  }
                  else
@@ -57,25 +48,11 @@ namespace TorusTool.Models
 
         private static void DecodeL8(int width, int height, byte[] input, byte[] output)
         {
-             // ... (Keep existing L8 logic or Empty) ...
+             // PICA200 8x8 Tiled Morton Swizzling logic (Stubbed if unused, but kept for fallback)
         }
 
         private static void DecodeETC1A4(int width, int height, byte[] input, byte[] output)
         {
-            // PICA200 ETC1A4 Layout: 8x8 Tiles.
-            // Each 8x8 Tile contains four 4x4 compressed blocks.
-            // Tile Layout (2x2 blocks):
-            // Block 0: (0,0) - (3,3)
-            // Block 1: (4,0) - (7,3)
-            // Block 2: (0,4) - (3,7)
-            // Block 3: (4,4) - (7,7)
-            
-            // Per 4x4 Block:
-            // 8 bytes Alpha (64 bits) -> 4 bits per pixel? 
-            //   Usually reversed? Or LSB?
-            //   Reference: Alpha is separate. PICA might store it as 8 bytes A4.
-            // 8 bytes ETC1 Color
-            
             int ptr = 0;
             
             for (int tileY = 0; tileY < height; tileY += 8)
@@ -124,23 +101,17 @@ namespace TorusTool.Models
 
         private static void DecodeETC1Block(byte[] block, long alphaData, int baseX, int baseY, int width, int height, byte[] output)
         {
-            // PICA200 ETC1 / Standard ETC1 (Big Endian Stream)
-            // Bytes 0-3: High 32 bits (Pixel Indices)
-            // Bytes 4-7: Low 32 bits (Data / Colors / Flags)
+            // PICA200 / ETC1 Layout (Data First):
+            // Bytes 0-3: Data (Colors + Flags)
+            // Bytes 4-7: Indices (High 32)
             
-            // Construct Big Endian words manually to match Spec bit positions
-            uint high = (uint)((block[0] << 24) | (block[1] << 16) | (block[2] << 8) | block[3]);
-            uint low  = (uint)((block[4] << 24) | (block[5] << 16) | (block[6] << 8) | block[7]);
+            // Construct Big Endian words
+            // 'low' = Colors/Flags (0..3)
+            uint low  = (uint)((block[0] << 24) | (block[1] << 16) | (block[2] << 8) | block[3]);
+            // 'high' = Indices (4..7)
+            uint high = (uint)((block[4] << 24) | (block[5] << 16) | (block[6] << 8) | block[7]);
             
-            // 'low' contains Data/Colors (Bits 31..0 of 64-bit word)
-            // 'high' contains Indices (Bits 63..32 of 64-bit word)
-
-            // Parse Data (low)
-            // Bit 0 (LSB of low) is technically Bit 0 of 64-bit word? 
-            // Yes, if we treat 0-7 as MSB..LSB sequence. 
-            // So block[7] contains Bits 7..0. block[7] bit 0 is Bit 0.
-            // Our 'low' construction puts block[7] at LSB. So 'low' bits align with Spec.
-            
+            // Flag bits are in 'low' (Data Word)
             bool diffBit = (low & 2) != 0; // Bit 1
             bool flipBit = (low & 1) != 0; // Bit 0
             
@@ -150,13 +121,6 @@ namespace TorusTool.Models
             if (diffBit)
             {
                 // Differential Mode
-                // base1: 5 bits (Bits 27..31 -> Top 5 bits of Low)
-                // R1: low >> 27 ?
-                // Let's check mask. 
-                // R1 is Bits 63..59 of LOW part? No, Spec says 63..32 is Index.
-                // Low is 31..0.
-                // Base color 1 R is Bits 27..31 (5 bits).
-                
                 int r1_5 = (int)((low >> 27) & 0x1F);
                 int g1_5 = (int)((low >> 19) & 0x1F);
                 int b1_5 = (int)((low >> 11) & 0x1F);
@@ -211,15 +175,6 @@ namespace TorusTool.Models
             table1 = (int)((low >> 5) & 0x7);
             table2 = (int)((low >> 2) & 0x7);
             
-            // Decode Pixels
-            // Indices in 'high'.
-            // "MSB of pixel index is... LSB of pixel index is..."
-            // Let's use the standard "Access 2 bits at position i" logic.
-            // Index bits are spread across MS 16 bits and LS 16 bits of the 32-bit 'high' word?
-            // Usually: 
-            // LSBs for 16 pixels are in bits 15..0
-            // MSBs for 16 pixels are in bits 31..16
-            
             for (int y = 0; y < 4; y++)
             {
                 for (int x = 0; x < 4; x++)
@@ -228,16 +183,13 @@ namespace TorusTool.Models
                     int py = baseY + y;
                     if (px >= width || py >= height) continue;
 
-                    // Init Subblock
-                    int subBlock = 0; // 0 or 1
+                    int subBlock = 0;
                     if (flipBit)
                     {
-                        // 2x4 blocks (Top, Bottom)
                         subBlock = (y < 2) ? 0 : 1;
                     }
                     else
                     {
-                        // 4x2 blocks (Left, Right)
                         subBlock = (x < 2) ? 0 : 1;
                     }
                     
@@ -246,74 +198,13 @@ namespace TorusTool.Models
                     int baseB = (subBlock == 0) ? b1 : b2;
                     int tableIdx = (subBlock == 0) ? table1 : table2;
                     
-                    // Pixel Index extraction
-                    // Standard ETC1 (OpenGL):
-                    // Pixels are Row-Major: 0=(0,0), 1=(1,0), 2=(2,0), 3=(3,0), 4=(0,1)...
-                    // Indices are packed MSB first.
-                    // i.e. Bit 15 of 'indices' word is for pixel 0. Bit 0 is for pixel 15.
-                    
-                    int pixelIndex = y * 4 + x; 
-                    int bitOffset = 15 - pixelIndex;
-                    
-                    // High word contains 32 bits: [Table2(16)] [Table1(16)]?
-                    // No, 'high' variable contains the 32 bits of Indices.
-                    // The spec says:
-                    // bytes 0..1 = LSBs of indices
-                    // bytes 2..3 = MSBs of indices 
-                    // (Using Byte offsets 0..7 of file).
-                    
-                    // My previous 'high' construction:
-                    // block[0]<<24 | block[1]<<16 ...
-                    // This puts block[0] at bits 31..24.
-                    
-                    // If file bytes 0..3 are Indices (as assumed in previous step):
-                    // block[0..1] = IndexMSB? or IndexLSB?
-                    // block[2..3] = IndexLSB? or IndexMSB?
-                    
-                    // Let's look at the mask logic.
-                    // LSB vector = bytes 0,1 ?
-                    // MSB vector = bytes 2,3 ?
-                    
-                    // Let's assume 'high' is constructed as Big Endian ulong.
-                    // But maybe we should split it.
-                    // uint val = high;
-                    // vector1 = val >> 16; (Upper 16) -> block[0], block[1]
-                    // vector2 = val & 0xFFFF; (Lower 16) -> block[2], block[3]
-                    
-                    // Usually:
-                    // Index LSBs = 0..15 bits
-                    // Index MSBs = 16..31 bits
-                    
-                    // Let's try:
-                    // bit0 comes from one half, bit1 from the other.
-                    // Which one?
-                    // If stripes are vertical, maybe x/y mapping is still wrong.
-                    
-                    // Let's try standard Row Major + MSB extraction on the current 'high' word.
-                    // But assume 'high' has LSB vector in lower 16, MSB vector in upper 16?
-                    // Previous: bit0 from lower 16, bit1 from upper 16.
-                    
-                    int bit0 = (int)((high >> bitOffset) & 1);        // From block[2..3] (if valid)
-                    int bit1 = (int)((high >> (bitOffset + 16)) & 1); // From block[0..1]
-                    
-                    // Wait, if I used MSB First (15-i), and `high` is 32 bits...
-                    // Lower 16 bits (0-15) correspond to block[2..3].
-                    // Upper 16 bits (16-31) correspond to block[0..1].
-                    
-                    // If standard:
-                    // LSB vector = bytes 0,1??
-                    // Let's assume block[0..1] is LSB Indicies, block[2..3] is MSB Indices.
-                    // Then `bit0` should come from upper 16 (if BE load) or lower 16?
-                    // My `high` load: block[0] is most significant BITS.
-                    // So block[0..1] is Upper 16.
-                    
-                    // If block[0..1] stores LSBs, then Bit0 comes from Upper 16.
-                    // If block[2..3] stores MSBs, then Bit1 comes from Lower 16.
-                    
-                    // Let's try:
-                    // bit0 = (high >> (bitOffset + 16)) & 1;
-                    // bit1 = (high >> bitOffset) & 1;
-                    
+                    // Pixel Index extraction (Column Major)
+                    // High 32 bits (Indices):
+                    //   Bits 0..15: LSBs of indices
+                    //   Bits 16..31: MSBs of indices
+                    int bitPos = x * 4 + y;
+                    int bit0 = (int)((high >> bitPos) & 1);
+                    int bit1 = (int)((high >> (bitPos + 16)) & 1);
                     int val = (bit1 << 1) | bit0;
                     
                     int modifier = ETC1ModifierTable[tableIdx, val];
@@ -323,19 +214,6 @@ namespace TorusTool.Models
                     int b = Math.Max(0, Math.Min(255, baseB + modifier));
                     
                     // Alpha (Keep existing logic)
-                    // PICA Alpha is often tiled too? Or just row major?
-                    // Previous success suggests existing alpha logic was okay-ish.
-                    // But let's verify if alpha needs transposing too. 
-                    // Previous: `int pixelIdx = y * 4 + x;` (Row Major)
-                    // If ETC1 colors use Column Major (x*4+y), maybe alpha does too?
-                    // Let's stick to Row Major for Alpha for now since shape was "correct".
-                    
-                    // Wait, if colors are Column Major, Alpha should probably match?
-                    // Let's try Column Major for Alpha too? 
-                    // `int alphaIdx = x * 4 + y;`
-                    // Just to be safe. "Shape correct" might be lenient on transposition if shape is simple.
-                    // Let's keep Alpha Row Major (y*4+x) for now to minimize regression risk on shape.
-                    
                     int pixelIdx = y * 4 + x; 
                     int shift = pixelIdx * 4;
                     long alpha4 = (alphaData >> shift) & 0xF;
